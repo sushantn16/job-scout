@@ -1,4 +1,5 @@
-// Tailoring stage: for each "apply" job, write a tailored one-page CV and application text, then mark it cv_ready.
+// Tailoring stage: for each "apply" job, write a tailored one-page CV and application text, mark it cv_ready, then
+// read its application form and prepare answers (./form.ts). A form that can't be read never fails the job.
 import { mkdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Config } from "../config.ts";
@@ -6,6 +7,7 @@ import { companyKey, type Store } from "../db/store.ts";
 import type { ScreenResult } from "../injection/screen.ts";
 import type { CallRecord } from "../llm/client.ts";
 import { mapLimit } from "../http.ts";
+import { formOne, formSummary } from "./form.ts";
 import type { CompanyProfile } from "../research/profile.ts";
 import type { Posting } from "../sources/types.ts";
 import { renderOnePage } from "../tailor/fit.ts";
@@ -57,6 +59,8 @@ export async function processTailoring(store: Store, cfg: Config, runId: number,
       const out = await tailorOne({ id, posting, vet, screen: store.stage<ScreenResult>(id, "screen") }, store, cfg, candidate, (r) => store.recordCall(runId, id, r));
       store.setStatus(id, "cv_ready");
       store.event(runId, "tailor", `cv ready: ${out.dir}${out.needsEdit ? ` (${out.needsEdit} claim(s) need an edit)` : ""}`, out.needsEdit ? "warn" : "info", id);
+      const form = await formOne(id, store, cfg, candidate, (r) => store.recordCall(runId, id, r)).catch((e: Error) => ({ error: e.message }));
+      store.event(runId, "form", formSummary(form), "error" in form ? "warn" : "info", id);
       return out;
     } catch (e) {
       store.event(runId, "tailor", `failed: ${(e as Error).message}`, "error", id);

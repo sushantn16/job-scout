@@ -20,6 +20,7 @@
     "vet": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/vet.ts",
     "eval:ranking": "node --env-file=.env --disable-warning=ExperimentalWarning evals/ranking.ts",
     "tailor": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/tailor.ts",
+    "form": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/form.ts",
     "dashboard": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server/index.ts",
     "dashboard:dev": "vite --config dashboard/vite.config.ts",
     "dashboard:build": "vite build --config dashboard/vite.config.ts",

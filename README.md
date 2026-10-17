@@ -5,7 +5,8 @@ your rules. It screens the rest for text aimed at AI systems, researches each co
 explainable formula. For each strong match it prepares:
 - a tailored one-page CV;
 - a "why us" answer;
-- a two-line note to the hiring manager.
+- a two-line note to the hiring manager;
+- answers to the questions on its application form.
 
 A local dashboard shows every stage. The pipeline never submits anything: you review what it prepared and apply
 yourself. If you connect Gmail, replies from companies (confirmations, interview invites, rejections) update each job's
@@ -14,9 +15,9 @@ status, which closes the loop.
 ## How it works
 
 ```
-job boards ─▶ Fetch ─▶ Filter ─▶ Injection screen ─▶ Research ─▶ Score ─▶ Tailor ─▶ application folder ─▶ you apply
-                                                                                                            │
-                                     Outcomes ◀─ Inbox (rules only) ◀─ Gmail replies ◀──────────────────────┘
+job boards ─▶ Fetch ─▶ Filter ─▶ Injection screen ─▶ Research ─▶ Score ─▶ Tailor ─▶ Form answers ─▶ you apply
+                                                                                                      │
+                                     Outcomes ◀─ Inbox (rules only) ◀─ Gmail replies ◀────────────────┘
 ```
 
 Each run looks back to the previous run, at least 24 hours and at most 14 days, so nothing posted in between is missed.
@@ -53,9 +54,23 @@ can use tools.
    master CV and writes the "why us" answer and the note. A validator rejects any number, technology or name that isn't
    in your CV, or, for the application text, in the cited company research. Rejected text gets one retry. Finally the
    CV is fitted to one page and rendered to PDF.
-7. **You.** Each match gets a folder with the PDF, the CV as JSON and the application text. The dashboard has copy
-   buttons and links to the posting. You apply on the company's site.
-8. **Inbox** (code, optional). Each run reads replies over IMAP, with the mailbox opened read-only, and sorts them with
+7. **Application form** (code, then Claude). Once a job is ready to apply, the pipeline reads the questions on its
+   application form. Greenhouse and Ashby publish their forms as data. Other forms are read from the page with
+   JavaScript off, so the page can't run code. Then:
+   - Profile fields (name, email, phone, LinkedIn) are filled from your CV.
+   - Questions many forms share (visa, salary, notice period, office days) use your **saved answers**. You write each
+     one once on the dashboard, and it's reused on every form. They are never guessed.
+   - Open questions ("Which AI tools do you use, and how?") are drafted from your CV and the company research, and
+     checked like the CV.
+   - Consent boxes and voluntary demographic questions are always left to you.
+   - Questions containing text aimed at AI tools are flagged and not drafted.
+8. **You.** Each match gets a folder with:
+   - the CV as PDF and JSON;
+   - the application text;
+   - `form.md`, with every form question and what to enter.
+
+   The dashboard has copy buttons and a "Needs you" list. You apply on the company's site.
+9. **Inbox** (code, optional). Each run reads replies over IMAP, with the mailbox opened read-only, and sorts them with
    rules into rejection, interview or confirmation. A reply is matched to a job only when it's unambiguous, and a
    status never moves backwards. Every change can be undone. Email text is never sent to an LLM.
 
@@ -107,6 +122,7 @@ use its own model:
 - `JOB_SCOUT_MODEL_SCREEN`: a small model is enough.
 - `JOB_SCOUT_MODEL_RESEARCH` and `JOB_SCOUT_MODEL_VET`: a mid-size model.
 - `JOB_SCOUT_MODEL_TAILOR`: the strongest model, because it writes what employers read.
+- `JOB_SCOUT_MODEL_FORM`: answers to form questions; it uses the tailor's model unless set.
 
 Roles you leave unset use `JOB_SCOUT_MODEL`. Check the connection with `pnpm spike:llm`, which makes two small test calls.
 
@@ -206,6 +222,15 @@ job as applied from its detail page, or let the inbox do it.
 
 Each run then checks the inbox. `pnpm inbox` checks it on its own.
 
+### Application forms
+
+Forms are read automatically for jobs from Ashby, Greenhouse and Lever, plus career sites run on Teamtailor. For
+other jobs, such as those found through LinkedIn or Hacker News, paste the form's URL on the job page and press
+**Read form**.
+
+Saved answers live in `data/private/answers.json`, and the dashboard writes them the first time a form asks. Forms
+whose questions are built by JavaScript (Personio, for example) can't be read this way; open those yourself.
+
 ### Optional: LinkedIn
 
 A LinkedIn source isn't included, because automated access is against LinkedIn's terms. A git-ignored module at
@@ -215,11 +240,12 @@ A LinkedIn source isn't included, because automated access is against LinkedIn's
 
 | Command | What it does |
 |---|---|
-| `pnpm scan` | The whole pipeline: fetch, filter, screen, research, score, tailor, inbox |
+| `pnpm scan` | The whole pipeline: fetch, filter, screen, research, score, tailor, form answers, inbox |
 | `pnpm vet` | Screen, research and score jobs already queued, without fetching |
 | `pnpm tailor` | Tailor "apply" jobs only |
 | `pnpm rescreen` | Re-apply the filter rules to queued jobs after editing the config |
 | `pnpm mark <company> "<title words>" <status>` | Set a job's status by hand |
+| `pnpm form <job-id> [form-url]` | Read a job's application form and prepare answers |
 | `pnpm inbox` | Read Gmail replies |
 | `pnpm dashboard` / `pnpm dashboard:dev` | The dashboard, built / with live reload |
 | `pnpm test` / `pnpm typecheck` | Unit tests / type checks |

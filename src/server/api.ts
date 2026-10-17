@@ -1,5 +1,5 @@
-// Read-mostly JSON API over the SQLite store for the dashboard. Writes are limited to job status changes and starting
-// pipeline commands.
+// Read-mostly JSON API over the SQLite store for the dashboard. Writes are limited to job status changes, saved form
+// answers, and starting pipeline commands.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -10,6 +10,8 @@ import { outputRoot, resolveOutput } from "../tailor/output.ts";
 import { runPipeline } from "./pipeline.ts";
 import { nextStatus, type EmailKind } from "../inbox/classify.ts";
 import { windowStart } from "../filter/freshness.ts";
+import { loadAnswers, saveAnswer, STANDARD, STANDARD_KEYS, type StandardKey } from "../forms/answers.ts";
+import type { FormStage } from "../pipeline/form.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>, query: URLSearchParams) => Promise<void> | void;
 
@@ -28,6 +30,20 @@ const readBody = async (req: IncomingMessage): Promise<unknown> => {
 };
 
 const parse = <T>(s: string | null): T | null => (s ? (JSON.parse(s) as T) : null);
+
+/** Answers saved after a form was read fill its "needs you" fields at once, without preparing the form again. */
+function withSaved(form: FormStage | null, saved: Record<string, string>): FormStage | null {
+  if (!form || "error" in form) return form;
+  return {
+    ...form,
+    fields: form.fields.map((f) => {
+      const answer = f.key ? saved[f.key] : undefined;
+      if (!f.needsYou || !answer) return f;
+      const pick = ["choice", "multi", "boolean"].includes(f.type);
+      return { ...f, value: answer, source: "saved", needsYou: false, why: pick ? `Pick the option that matches your saved answer` : "From your saved answers" };
+    }),
+  };
+}
 
 /** Statuses a person may set from the dashboard. "apply" approves a job held for review; "new" re-queues it for vetting. */
 const SETTABLE: JobStatus[] = ["apply", "new", "applied", "interview", "rejected", "dismissed"];
@@ -99,6 +115,8 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
         tailor,
         application: appFile && existsSync(appFile) ? readFileSync(appFile, "utf8") : null,
         companyProfile: company ? { ...JSON.parse(company.profile), researchedAt: company.researched_at } : null,
+        form: withSaved(parse<FormStage>(row.form ?? null), loadAnswers()),
+        answerTopics: STANDARD,
         cost: cost(db.prepare(`${usageSql} WHERE job_id = ? GROUP BY model`).all(p.id!) as never),
       });
     }],
@@ -120,6 +138,25 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       store.setStatus(p.id!, status);
       store.event(store.latestRunId(), "dashboard", `status ${row.status} → ${status}`, "info", p.id!);
       json(res, 200, { id: p.id, from: row.status, to: status });
+    }],
+
+    // Read the job's application form and prepare answers, in the background like the pipeline commands.
+    ["POST", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/form$/, async (req, res, p) => {
+      const { url } = (await readBody(req)) as { url?: string };
+      if (url !== undefined && (typeof url !== "string" || !/^https?:\/\/[^\s]+$/.test(url.trim()))) return json(res, 400, { error: "the form URL must start with http:// or https://" });
+      if (!db.prepare("SELECT id FROM jobs WHERE id = ? AND vet IS NOT NULL").get(p.id!)) return json(res, 404, { error: "no vetted job with this id" });
+      const child = spawn("pnpm", ["-s", "form", p.id!, ...(url ? [url.trim()] : [])], { cwd: repoDir, detached: true, stdio: "ignore" });
+      child.unref();
+      json(res, 202, { started: "form", pid: child.pid });
+    }],
+
+    ["POST", /^\/api\/answers$/, async (req, res) => {
+      const { key, value } = (await readBody(req)) as { key?: string; value?: string };
+      if (!key || !STANDARD_KEYS.includes(key as StandardKey)) return json(res, 400, { error: `key must be one of ${STANDARD_KEYS.join(", ")}` });
+      if (typeof value !== "string" || value.length > 2000) return json(res, 400, { error: "value must be text under 2,000 characters" });
+      saveAnswer(key as StandardKey, value);
+      store.event(store.latestRunId(), "dashboard", `saved answer: ${key}`);
+      json(res, 200, { key });
     }],
 
     ["POST", /^\/api\/actions\/(?<name>scan|vet|tailor|inbox)$/, (_req, res, p) => {

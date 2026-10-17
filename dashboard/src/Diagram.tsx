@@ -18,7 +18,7 @@ const BLOCKS: Block[] = [
   { key: "screen", x: 620, y: ROW[0]!, title: "Injection screen", does: "Text aimed at AI: patterns, then an LLM check", kind: "LLM" },
   { key: "research", x: 814, y: ROW[0]!, title: "Research", does: "Company website, news, HN; every claim cited", kind: "LLM" },
   { key: "vet", x: 329, y: ROW[1]!, title: "Score", does: "LLM rates the rubric; the formula decides", kind: "LLM" },
-  { key: "tailor", x: 523, y: ROW[1]!, title: "Tailor", does: "CV, why-us and note; fact-checked", kind: "LLM" },
+  { key: "tailor", x: 523, y: ROW[1]!, title: "Tailor", does: "CV, why-us, note, form answers; fact-checked", kind: "LLM" },
   { key: "ready", x: 717, y: ROW[1]!, title: "Ready", does: "Application folder written", kind: "code" },
   { key: "you", x: 1032, y: ROW[1]!, title: "You", does: "Review, then apply on the company's site", kind: "outside" },
   { key: "gmail", x: 1032, y: ROW[2]!, title: "Gmail", does: "Replies: confirmations, rejections, interviews", kind: "outside" },

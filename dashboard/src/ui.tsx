@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import type { Status } from "./api";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -90,3 +90,16 @@ export function Banner({ tone, title, children }: { tone: "warning" | "critical"
 
 export const H3 = ({ children, className }: { children: ReactNode; className?: string }) => <h3 className={cx("text-[13px] text-ink-2", className)}>{children}</h3>;
 export const List = ({ children }: { children: ReactNode }) => <ul className="m-0 grid list-disc gap-1 pl-[18px]">{children}</ul>;
+
+/** Text with a copy button, for pasting into application forms. */
+export function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="relative whitespace-pre-wrap rounded-lg border border-line bg-raised px-3.5 py-3 pr-20">
+      <Button size="sm" className="absolute right-2 top-2" onClick={() => navigator.clipboard.writeText(text).then(() => (setDone(true), setTimeout(() => setDone(false), 1500)))}>
+        {done ? "Copied" : "Copy"}
+      </Button>
+      {text}
+    </div>
+  );
+}

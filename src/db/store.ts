@@ -111,7 +111,7 @@ export class Store {
     if (!cols.some((c) => c.name === "kind")) this.db.exec("ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'scan'");
     const jobCols = new Set((this.db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
     // Columns added after the first schema; each stage stores its full JSON result for the dashboard.
-    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"]] as const)
+    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"]] as const)
       if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
     const callCols = new Set((this.db.prepare("PRAGMA table_info(llm_calls)").all() as { name: string }[]).map((c) => c.name));
     for (const col of ["cache_read_tokens", "cache_write_tokens"])
@@ -230,11 +230,11 @@ export class Store {
   }
 
   /** Persist one stage's result on the job. */
-  saveStage(id: string, stage: "screen" | "vet" | "tailor", result: object, status?: JobStatus): void {
+  saveStage(id: string, stage: "screen" | "vet" | "tailor" | "form", result: object, status?: JobStatus): void {
     this.db.prepare(`UPDATE jobs SET ${stage} = ?${status ? ", status = ?" : ""} WHERE id = ?`).run(...(status ? [JSON.stringify(result), status, id] : [JSON.stringify(result), id]));
   }
 
-  stage<T>(id: string, stage: "screen" | "vet" | "tailor"): T | null {
+  stage<T>(id: string, stage: "screen" | "vet" | "tailor" | "form"): T | null {
     const row = this.db.prepare(`SELECT ${stage} AS v FROM jobs WHERE id = ?`).get(id) as { v: string | null } | undefined;
     return row?.v ? (JSON.parse(row.v) as T) : null;
   }

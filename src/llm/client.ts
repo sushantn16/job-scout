@@ -3,7 +3,7 @@ import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 
-export type Role = "screen" | "research" | "vet" | "tailor";
+export type Role = "screen" | "research" | "vet" | "tailor" | "form";
 export type Effort = "low" | "medium" | "high";
 
 export interface CallRecord {
@@ -33,9 +33,13 @@ export class LlmRefusal extends LlmError {
 }
 
 let client: AnthropicBedrock | undefined;
-/** The model for a role: JOB_SCOUT_MODEL_<ROLE> (e.g. JOB_SCOUT_MODEL_SCREEN) if set, else JOB_SCOUT_MODEL. */
+/**
+ * The model for a role: JOB_SCOUT_MODEL_<ROLE> (e.g. JOB_SCOUT_MODEL_SCREEN) if set, else JOB_SCOUT_MODEL. Form answers
+ * are text employers read, so without their own setting they use the tailor's model.
+ */
 export const modelFor = (role: Role) => {
-  const m = process.env[`JOB_SCOUT_MODEL_${role.toUpperCase()}`] || process.env.JOB_SCOUT_MODEL;
+  const env = process.env;
+  const m = env[`JOB_SCOUT_MODEL_${role.toUpperCase()}`] || (role === "form" ? env.JOB_SCOUT_MODEL_TAILOR : "") || env.JOB_SCOUT_MODEL;
   if (!m) throw new LlmError("JOB_SCOUT_MODEL is not set (see .env.example)");
   return m;
 };

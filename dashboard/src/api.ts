@@ -75,7 +75,30 @@ export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary"
     reviewLinks: { glassdoor: string; kununu: string }; researchedAt: string;
   } | null;
   cost: number;
+  form: FormState | null;
+  /** Saved-answer topics and what each holds. */
+  answerTopics: Record<string, string>;
 }
+
+export interface FormFieldPrep {
+  id: string;
+  question: string;
+  type: "text" | "textarea" | "choice" | "multi" | "boolean" | "file" | "email" | "tel" | "number" | "date" | "url";
+  required: boolean;
+  options?: string[];
+  maxLength?: number;
+  description?: string;
+  kind: "profile" | "upload" | "consent" | "demographic" | "question";
+  value: string | null;
+  choice?: string[];
+  key?: string;
+  source: "profile" | "saved" | "drafted" | "file" | "you";
+  needsYou: boolean;
+  why: string;
+  problems: string[];
+  flagged?: string;
+}
+export type FormState = { url: string; via: string; readAt: string; fields: FormFieldPrep[] } | { url?: string; error: string };
 
 export interface Event { id: number; run_id: number; job_id: string | null; at: string; level: "info" | "warn" | "error"; stage: string; message: string }
 

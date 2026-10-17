@@ -2,7 +2,8 @@ import { useState, type ReactNode } from "react";
 import { euro, post, usd, usePoll, type JobDetail as Job, type Status } from "./api";
 import { ScoreBreakdown } from "./charts";
 import { Markdown } from "./Markdown";
-import { Banner, Button, Card, H3, List, Pill, StatusPill } from "./ui";
+import { FormPanel } from "./FormPanel";
+import { Banner, Button, Card, Copy, H3, List, Pill, StatusPill } from "./ui";
 
 /** Which status changes make sense from each status. "new" re-queues the job for vetting. */
 const NEXT: Partial<Record<Status, { to: Status; label: string; primary?: boolean }[]>> = {
@@ -14,18 +15,6 @@ const NEXT: Partial<Record<Status, { to: Status; label: string; primary?: boolea
   applied: [{ to: "interview", label: "Got an interview", primary: true }, { to: "rejected", label: "Rejected" }],
   interview: [{ to: "rejected", label: "Rejected" }],
 };
-
-function Copy({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <div className="relative whitespace-pre-wrap rounded-lg border border-line bg-raised px-3.5 py-3 pr-20">
-      <Button size="sm" className="absolute right-2 top-2" onClick={() => navigator.clipboard.writeText(text).then(() => (setDone(true), setTimeout(() => setDone(false), 1500)))}>
-        {done ? "Copied" : "Copy"}
-      </Button>
-      {text}
-    </div>
-  );
-}
 
 /** The posting text with flagged quotes highlighted. Built from text nodes, never HTML. */
 function Highlighted({ text, quotes }: { text: string; quotes: string[] }) {
@@ -165,6 +154,7 @@ export function JobDetail({ id, back }: { id: string; back: () => void }) {
               ) : null}
             </Card>
           ) : null}
+          {job.tailor || job.form ? <FormPanel job={job} onChange={refresh} /> : null}
           <Card title="Posting">
             <details>
               <summary className="cursor-pointer font-semibold text-ink-2">Show the original posting text{traps.length ? " (flagged text highlighted)" : ""}</summary>
