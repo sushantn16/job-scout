@@ -1,0 +1,121 @@
+{
+  "$comment": "An example to start from. Put your own settings in config/job-scout.local.json (git-ignored), which is used instead of this file when it exists. Validated by src/config.ts at startup.",
+  "profile": {
+    "maxYearsRequired": 6,
+    "minBandTopEur": 80000,
+    "germanBlocksAt": "required"
+  },
+  "caps": {
+    "vetPerRun": 15,
+    "tailorPerRun": 5
+  },
+  "freshness": {
+    "minHours": 24,
+    "maxHours": 336
+  },
+  "vet": {
+    "applyAt": 85,
+    "maybeAt": 65,
+    "weights": {
+      "roleFit": 25,
+      "stackOverlap": 20,
+      "seniority": 10,
+      "aiRelevance": 10,
+      "funding": 8,
+      "culture": 8,
+      "english": 7,
+      "pay": 7,
+      "competition": 5,
+      "remoteBonus": 1
+    }
+  },
+  "fxToEur": {
+    "EUR": 1,
+    "GBP": 1.17,
+    "USD": 0.92
+  },
+  "locations": {
+    "berlin": "\\bberlin\\b",
+    "germany": "\\b(germany|deutschland)\\b",
+    "remoteEu": "remote.{0,40}(europe|emea|\\beu\\b|cet|anywhere|worldwide|global)|(europe|emea|\\beu\\b).{0,20}remote"
+  },
+  "titleInclude": "product engineer|full[- ]?stack|frontend|front[- ]end|software engineer|ai engineer|applied ai|forward[- ]deployed|founding engineer|design engineer|web engineer|llm engineer|typescript|member of technical staff|engineer.*(agent|\\bai\\b|llm)",
+  "titleExclude": "intern\\b|internship|working student|werkstudent|junior|manager|director|head of|principal|staff|vp\\b|android|ios\\b|mobile|react native|embedded|firmware|security|data engineer|data scientist|research|sre\\b|site reliability|devops|platform engineer|infrastructure|\\bqa\\b|test|sales|account|support|recruit|java\\b|golang|\\bgo\\b|rust|c\\+\\+|\\.net|php|angular|svelte|kernel|hardware|robot|network|database|solutions architect|consultant|entwickler|lead\\b",
+  "companyExclude": "instaffo|smartclip|michael page|forsyth barnes|european tech recruit|xcede|fullstack talents|hays|randstad",
+  "sources": {
+    "ashby": [
+      "linear",
+      "posthog",
+      "supabase",
+      "sentry",
+      "notion"
+    ],
+    "greenhouse": [
+      "vercel",
+      "gitlab",
+      "datadog",
+      "elastic"
+    ],
+    "lever": [
+      "qonto"
+    ],
+    "personio": [],
+    "hn": true
+  },
+  "companyNames": {
+    "linear": "Linear",
+    "posthog": "PostHog",
+    "supabase": "Supabase",
+    "sentry": "Sentry",
+    "notion": "Notion",
+    "vercel": "Vercel",
+    "gitlab": "GitLab",
+    "datadog": "Datadog",
+    "elastic": "Elastic",
+    "qonto": "Qonto"
+  },
+  "linkedin": {
+    "keywords": [
+      "Product Engineer",
+      "Senior Full Stack Engineer",
+      "AI Engineer",
+      "Senior Frontend Engineer"
+    ],
+    "geoId": "106967730",
+    "location": "Berlin, Berlin, Germany",
+    "maxDetails": 60
+  },
+  "pricing": {
+    "default": {
+      "input": 4,
+      "output": 20,
+      "cacheRead": 0.2,
+      "cacheWrite": 5,
+      "note": "Anthropic list prices, USD per million tokens, keyed by the model name Bedrock reports. Bedrock pricing may differ."
+    },
+    "claude-opus-5-5": {
+      "input": 4,
+      "output": 20,
+      "cacheRead": 0.2,
+      "cacheWrite": 5
+    },
+    "claude-sonnet-5-5": {
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.2,
+      "cacheWrite": 2.5
+    },
+    "claude-haiku-5-5": {
+      "input": 0.1,
+      "output": 0.5,
+      "cacheRead": 0.01,
+      "cacheWrite": 0.125
+    },
+    "claude-sonnet-5": {
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.2,
+      "cacheWrite": 2.5
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "targetRoles": [
+    "..."
+  ],
+  "languages": "...",
+  "location": "...",
+  "compensation": "...",
+  "culture": [
+    "..."
+  ],
+  "experience": "...",
+  "knownGaps": [
+    "..."
+  ],
+  "$comment": "Copy to data/private/preferences.json and fill in. Read by the vetter alongside data/private/cv-master.json.",
+  "aiFocus": "..."
+}

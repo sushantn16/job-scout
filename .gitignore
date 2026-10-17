@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/
+out/
+src/sources/private/
+dashboard/dist/
+backups/
+config/*.local.json

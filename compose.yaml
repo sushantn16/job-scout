@@ -1,0 +1,27 @@
+# docker compose up -d  →  dashboard on http://127.0.0.1:8765 (published on the host's loopback only).
+# Everything lives inside Docker: the database and your private inputs in the job-scout-data volume, generated applications
+# in job-scout-applications. Config is baked into the image. `pnpm docker:import` copies existing host data in once;
+# `pnpm docker:export` writes a backup archive of both volumes.
+services:
+  job-scout:
+    build: .
+    image: job-scout:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${JOB_SCOUT_PORT:-8765}:${JOB_SCOUT_PORT:-8765}"
+    env_file: .env
+    environment:
+      JOB_SCOUT_PORT: "${JOB_SCOUT_PORT:-8765}"
+      JOB_SCOUT_OUTPUT_DIR: /app/applications
+      # The Gmail app password, as a file in the data volume (no Keychain in a container). The inbox is skipped without it.
+      JOB_SCOUT_IMAP_PASSWORD_FILE: /app/data/private/imap-password
+    volumes:
+      - job-scout-data:/app/data
+      - job-scout-applications:/app/applications
+      # The one host mount, read-only: AWS credentials. An SSO login needs your browser, so renew it on the host with
+      # `aws sso login`; the container only checks the session.
+      - ${HOME}/.aws:/home/node/.aws:ro
+
+volumes:
+  job-scout-data:
+  job-scout-applications:

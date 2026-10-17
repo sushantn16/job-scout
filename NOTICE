@@ -1,0 +1,13 @@
+job-scout is MIT-licensed (see LICENSE). It bundles a few third-party assets under their own licenses:
+
+- Open Sans (assets/fonts/OpenSans-*.ttf), copyright 2020 The Open Sans Project Authors, under the SIL Open Font
+  License 1.1: assets/fonts/OFL.txt
+- DejaVu Sans (assets/fonts/DejaVuSans*.ttf), used for arrow glyphs in the CV, under the Bitstream Vera / Arev font
+  license: assets/fonts/DejaVu-LICENSE.txt
+- The mail, phone and location icons in the CV template (src/cv/render-html.ts) follow Google's Material Icons,
+  Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+- LinkedIn is a trademark of LinkedIn Corporation. The CV shows its logo only to label a profile link; this project is
+  not affiliated with or endorsed by LinkedIn.
+
+npm dependencies are installed, not bundled, and carry their own licenses (MIT, Apache-2.0, ISC, 0BSD, Unlicense;
+mailsplit is "MIT OR EUPL-1.1+", used under MIT). List them with `pnpm licenses list --prod`.

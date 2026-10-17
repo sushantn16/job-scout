@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* Palette tokens from the dataviz reference instance. Light by default; dark from the OS setting unless the theme toggle
+   says otherwise, and the toggle wins both ways. Components use them through the Tailwind colors defined below. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --raised: #ffffff;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --line: rgba(11, 11, 11, 0.1); --hover: rgba(11, 11, 11, 0.04);
+  --accent: #2a78d6; --accent-ink: #1c5cab; --meter-track: #cde2fb;
+  --step-1: #86b6ef; --step-2: #3987e5; --step-3: #1c5cab; --neutral-bar: #c3c2b7;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --warning-wash: rgba(250, 178, 25, 0.14); --critical-wash: rgba(208, 59, 59, 0.1); --accent-wash: rgba(42, 120, 214, 0.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --raised: #222220; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --line: rgba(255, 255, 255, 0.1); --hover: rgba(255, 255, 255, 0.05);
+    --accent: #3987e5; --accent-ink: #86b6ef; --meter-track: #104281;
+    --step-1: #1c5cab; --step-2: #3987e5; --step-3: #86b6ef; --neutral-bar: #383835;
+    --warning-wash: rgba(250, 178, 25, 0.12); --critical-wash: rgba(208, 59, 59, 0.16); --accent-wash: rgba(57, 135, 229, 0.06);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --raised: #222220; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --line: rgba(255, 255, 255, 0.1); --hover: rgba(255, 255, 255, 0.05);
+  --accent: #3987e5; --accent-ink: #86b6ef; --meter-track: #104281;
+  --step-1: #1c5cab; --step-2: #3987e5; --step-3: #86b6ef; --neutral-bar: #383835;
+  --warning-wash: rgba(250, 178, 25, 0.12); --critical-wash: rgba(208, 59, 59, 0.16); --accent-wash: rgba(57, 135, 229, 0.06);
+}
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-grid: var(--grid);
+  --color-axis: var(--axis);
+  --color-line: var(--line);
+  --color-hover: var(--hover);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-meter-track: var(--meter-track);
+  --color-step-1: var(--step-1);
+  --color-step-2: var(--step-2);
+  --color-step-3: var(--step-3);
+  --color-neutral-bar: var(--neutral-bar);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --color-warning-wash: var(--warning-wash);
+  --color-critical-wash: var(--critical-wash);
+  --color-accent-wash: var(--accent-wash);
+}
+
+@layer base {
+  body { @apply bg-page text-ink font-sans text-sm leading-normal; }
+  a { @apply text-accent-ink; }
+  h1, h2, h3 { @apply m-0 font-semibold; }
+}

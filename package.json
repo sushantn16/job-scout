@@ -1,0 +1,54 @@
+{
+  "name": "job-scout",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Job-search pipeline: board scan, prompt-injection screening, fit vetting, and fact-checked CV tailoring.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "spike:llm": "node --disable-warning=ExperimentalWarning --env-file=.env spikes/llm.ts",
+    "spike:cv": "node --disable-warning=ExperimentalWarning spikes/cv.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p dashboard",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.ts\"",
+    "scan": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/run.ts",
+    "rescreen": "node --disable-warning=ExperimentalWarning src/cli/rescreen.ts",
+    "mark": "node --disable-warning=ExperimentalWarning src/cli/mark.ts",
+    "eval:injection": "node --disable-warning=ExperimentalWarning --env-file=.env evals/injection.ts",
+    "vet": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/vet.ts",
+    "eval:ranking": "node --env-file=.env --disable-warning=ExperimentalWarning evals/ranking.ts",
+    "tailor": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/tailor.ts",
+    "dashboard": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server/index.ts",
+    "dashboard:dev": "vite --config dashboard/vite.config.ts",
+    "dashboard:build": "vite build --config dashboard/vite.config.ts",
+    "service:install": "node --disable-warning=ExperimentalWarning scripts/service.ts install",
+    "service:uninstall": "node --disable-warning=ExperimentalWarning scripts/service.ts uninstall",
+    "service:status": "node --disable-warning=ExperimentalWarning scripts/service.ts status",
+    "inbox": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli/inbox.ts",
+    "docker:import": "node --disable-warning=ExperimentalWarning scripts/docker-data.ts import",
+    "docker:export": "node --disable-warning=ExperimentalWarning scripts/docker-data.ts export"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.35.0",
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@aws-sdk/credential-providers": "^3.1152.0",
+    "imapflow": "^2.5.2",
+    "playwright-core": "^1.64.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "packageManager": "pnpm@10.22.0"
+}

@@ -1,0 +1,50 @@
+{
+  "$comment": "A fictional example. Copy to data/private/cv-master.json and replace with your own facts: the tailor may only reorder, select and reword what is here. Schema: src/cv/schema.ts.",
+  "basics": {
+    "name": "Alex Example",
+    "title": "Senior Product Engineer",
+    "email": "alex@example.com",
+    "phone": "+49 30 1234567",
+    "linkedin": "linkedin.com/in/alex-example",
+    "location": "Berlin, Germany",
+    "headlines": ["Senior Product Engineer", "Senior Full-Stack Engineer", "AI Product Engineer"]
+  },
+  "profile": "Product engineer with **7 years** of shipping web products end to end, from discovery to production, most recently **LLM features** used by 2M people a month. Comfortable owning a feature across React, Node.js and AWS, and at turning a vague problem into a measured result.",
+  "skills": [
+    { "id": "lang", "label": "Languages", "items": ["TypeScript", "JavaScript", "Python", "SQL"] },
+    { "id": "web", "label": "Web", "items": ["React", "Next.js", "Node.js", "Tailwind CSS", "Playwright"] },
+    { "id": "ai", "label": "AI", "items": ["LLM evals", "RAG", "prompt engineering", "agentic workflows"] },
+    { "id": "infra", "label": "Infrastructure", "items": ["AWS", "Docker", "PostgreSQL", "GitHub Actions"] }
+  ],
+  "experience": [
+    {
+      "id": "acme",
+      "title": "Senior Software Engineer",
+      "company": "Acme Marketplace",
+      "start": "03/2022",
+      "end": "present",
+      "location": "Berlin, Germany",
+      "bullets": [
+        { "id": "acme-llm", "text": "Built the LLM layer for an AI listing writer serving **2M requests/month**: compared models on an automated eval set, then led the switch, cutting inference cost from **€500K to €90K/year**." },
+        { "id": "acme-hub", "text": "Led development of **Insights Hub**, an analytics product for business customers, and owned the phased migration of **2M+ users** without downtime." },
+        { "id": "acme-perf", "text": "Cut page load time by **40%** on the busiest pages by moving rendering to the server and trimming the client bundle." },
+        { "id": "acme-mentor", "text": "Mentored **4 engineers** and introduced a design-review habit that shortened review cycles from days to hours." }
+      ]
+    },
+    {
+      "id": "globex",
+      "title": "Full-Stack Engineer",
+      "company": "Globex",
+      "start": "06/2019",
+      "end": "02/2022",
+      "location": "Hamburg, Germany",
+      "bullets": [
+        { "id": "globex-checkout", "text": "Rebuilt the checkout in React and Node.js, raising conversion by **12%** over a quarter of A/B tests." },
+        { "id": "globex-ci", "text": "Moved the team from manual releases to **daily deploys** with GitHub Actions and Playwright end-to-end tests." }
+      ]
+    }
+  ],
+  "education": [
+    { "id": "msc", "degree": "M.Sc. Computer Science", "school": "Example University", "year": "2019", "location": "Hamburg, Germany" }
+  ]
+}

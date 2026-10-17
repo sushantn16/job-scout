@@ -1,0 +1,8 @@
+node_modules
+dashboard/dist
+data
+out
+.env
+.git
+*.log
+backups
