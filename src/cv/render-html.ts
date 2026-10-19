@@ -17,8 +17,27 @@ const ICONS = {
   phone: '<path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1Z"/>',
   linkedin: '<path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2ZM8.3 18.3H5.7V9.8h2.6Zm-1.3-9.7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm11.3 9.7h-2.6v-4.1c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.2H10V9.8h2.5v1.2a2.7 2.7 0 0 1 2.5-1.4c2.6 0 3.1 1.7 3.1 4Z"/>',
   pin: '<path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/>',
+  // Globe (Material Icons, Apache 2.0) and the GitHub mark (Octicons, MIT, drawn on 16 px and scaled to 24).
+  web: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.9 6h-2.95a15.7 15.7 0 0 0-1.38-3.56A8 8 0 0 1 18.9 8ZM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96ZM4.26 14a8.2 8.2 0 0 1 0-4h3.38a16.5 16.5 0 0 0 0 4H4.26Zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56A8 8 0 0 1 5.08 16Zm2.95-8H5.08a8 8 0 0 1 4.33-3.56A15.7 15.7 0 0 0 8.03 8ZM12 19.96A14.1 14.1 0 0 1 10.09 16h3.82A14.1 14.1 0 0 1 12 19.96ZM14.34 14H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4Zm.25 5.56A15.7 15.7 0 0 0 15.97 16h2.95a8 8 0 0 1-4.33 3.56ZM16.36 14a16.5 16.5 0 0 0 0-4h3.38a8.2 8.2 0 0 1 0 4h-3.38Z"/>',
+  github: '<path transform="scale(1.5)" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>',
 };
 const icon = (name: keyof typeof ICONS) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+
+const withScheme = (url: string) => (/^https?:\/\//.test(url) ? url : `https://${url}`);
+const bare = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+const link = (url: string, name: keyof typeof ICONS) =>
+  `<span>${icon(name)}<a href="${escape(withScheme(url))}">${escape(bare(url))}</a></span>`;
+
+/** Two columns as before; with a website or GitHub, three, so the header gets no taller and the CV still fits a page. */
+function contactLine(basics: Cv["basics"]): string {
+  const email = `<span>${icon("mail")}${escape(basics.email)}</span>`;
+  const phone = `<span>${icon("phone")}${escape(basics.phone)}</span>`;
+  const place = `<span>${icon("pin")}${escape(basics.location)}</span>`;
+  const linkedin = link(basics.linkedin, "linkedin");
+  const extra = [basics.website && link(basics.website, "web"), basics.github && link(basics.github, "github")].filter(Boolean);
+  const cells = extra.length ? [email, phone, place, linkedin, ...extra] : [email, phone, linkedin, place];
+  return `<div class="contact${extra.length ? " three" : ""}">${cells.join("")}</div>`;
+}
 
 // Static (non-variable) fonts: Chrome embeds variable fonts as Type 3, which some ATS parsers mishandle.
 const font = (file: string) => dataUrl(resolve(FONTS, file), "font/ttf");
@@ -39,6 +58,8 @@ h1 em { font-size: 12.5pt; font-weight: 400; margin-left: 2mm; }
 .contact { display: grid; grid-template-columns: auto auto; justify-content: start; column-gap: 7mm; row-gap: 2.4mm; margin-top: 2mm; }
 .contact span { display: inline-flex; align-items: center; gap: 1.8mm; }
 .contact svg { width: 3.4mm; height: 3.4mm; fill: #222; }
+.contact.three { grid-template-columns: auto auto auto; column-gap: 6mm; }
+.contact a { color: inherit; text-decoration: none; }
 .photo { width: 27mm; height: 27mm; border-radius: 50%; object-fit: cover; }
 section { margin-top: 3.2mm; }
 h2 { font-size: 12.2pt; font-weight: 700; color: #111; border-bottom: 1.4px solid #111; padding-bottom: 0.3mm; margin-bottom: 1.2mm; }
@@ -74,10 +95,7 @@ export function renderCvHtml(cv: Cv, photoPath?: string): string {
 <header>
   <div>
     <h1>${escape(basics.name)}<em>${escape(basics.title)}</em></h1>
-    <div class="contact">
-      <span>${icon("mail")}${escape(basics.email)}</span><span>${icon("phone")}${escape(basics.phone)}</span>
-      <span>${icon("linkedin")}${escape(basics.linkedin)}</span><span>${icon("pin")}${escape(basics.location)}</span>
-    </div>
+    ${contactLine(basics)}
   </div>
   ${photo}
 </header>

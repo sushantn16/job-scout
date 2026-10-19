@@ -57,7 +57,7 @@ can use tools.
 7. **Application form** (code, then Claude). Once a job is ready to apply, the pipeline reads the questions on its
    application form. Greenhouse and Ashby publish their forms as data. Other forms are read from the page with
    JavaScript off, so the page can't run code. Then:
-   - Profile fields (name, email, phone, LinkedIn) are filled from your CV.
+   - Profile fields (name, email, phone, LinkedIn, and your website and GitHub if the CV lists them) are filled from your CV.
    - Questions many forms share (visa, salary, notice period, office days) use your **saved answers**. You write each
      one once on the dashboard, and it's reused on every form. They are never guessed.
    - Open questions ("Which AI tools do you use, and how?") are drafted from your CV and the company research, and

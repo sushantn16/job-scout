@@ -6,6 +6,8 @@
     "email": "alex@example.com",
     "phone": "+49 30 1234567",
     "linkedin": "linkedin.com/in/alex-example",
+    "website": "alex-example.dev",
+    "github": "github.com/alex-example",
     "location": "Berlin, Germany",
     "headlines": ["Senior Product Engineer", "Senior Full-Stack Engineer", "AI Product Engineer"]
   },

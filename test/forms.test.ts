@@ -77,7 +77,7 @@ test("who answers what: profile, upload, consent, demographic, question", () => 
   assert.equal(k("Which AI or agentic tools do you use in your day-to-day engineering work, and how?", "textarea"), "question");
 });
 
-test("profile values come from the CV, links from saved answers", () => {
+test("profile values come from the CV", () => {
   const cv = Cv.parse(JSON.parse(readFileSync("config/cv-master.example.json", "utf8")));
   const v = profileValues(cv, { github: "github.com/alex-example" });
   assert.equal(v.firstName, "Alex");
@@ -85,7 +85,17 @@ test("profile values come from the CV, links from saved answers", () => {
   assert.equal(v.linkedin, "https://linkedin.com/in/alex-example");
   assert.equal(v.github, "https://github.com/alex-example");
   assert.equal(v.currentCompany, "Acme Marketplace");
-  assert.equal(v.website, undefined);
+  assert.equal(v.website, "https://alex-example.dev");
+});
+
+test("links on the CV win over saved answers, which still fill the gaps", () => {
+  const base = Cv.parse(JSON.parse(readFileSync("config/cv-master.example.json", "utf8")));
+  const v = profileValues(base, { github: "github.com/someone-else" });
+  assert.equal(v.website, "https://alex-example.dev");
+  assert.equal(v.github, "https://github.com/alex-example");
+  const noLinks = { ...base, basics: { ...base.basics, website: undefined, github: undefined } };
+  assert.equal(profileValues(noLinks, { website: "alex.example" }).website, "https://alex.example");
+  assert.equal(profileValues(noLinks, {}).github, undefined);
 });
 
 test("drafted answers are checked: options, length and facts", () => {
