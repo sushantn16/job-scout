@@ -43,7 +43,7 @@ export function kindOf(f: Pick<FormField, "question" | "type" | "options">): Fie
   return "question";
 }
 
-/** The profile fields a form may ask for, from the CV plus saved answers (GitHub, website, address). */
+/** The profile fields a form may ask for, from the CV plus saved answers (address, and GitHub or website if the CV has none). */
 export function profileValues(cv: Cv, saved: Record<string, string>): ProfileValues {
   const [firstName = "", ...rest] = cv.basics.name.split(/\s+/);
   const current = cv.experience.find((r) => /present|now|heute|current/i.test(r.end));
@@ -51,8 +51,8 @@ export function profileValues(cv: Cv, saved: Record<string, string>): ProfileVal
   return {
     name: cv.basics.name, firstName, lastName: rest.join(" "), email: cv.basics.email, phone: cv.basics.phone,
     linkedin: url(cv.basics.linkedin), location: cv.basics.location,
-    ...(saved.github ? { github: url(saved.github) } : {}),
-    ...(saved.website ? { website: url(saved.website) } : {}),
+    ...(cv.basics.github || saved.github ? { github: url(cv.basics.github || saved.github!) } : {}),
+    ...(cv.basics.website || saved.website ? { website: url(cv.basics.website || saved.website!) } : {}),
     ...(saved.address ? { address: saved.address } : {}),
     ...(current ? { currentCompany: current.company } : {}),
   };

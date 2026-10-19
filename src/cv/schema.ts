@@ -22,6 +22,9 @@ export const Cv = z.object({
     email: z.string(),
     phone: z.string(),
     linkedin: z.string(),
+    /** Optional links. Shown in the contact line and used for "Website" and "GitHub" form fields. */
+    website: z.string().optional(),
+    github: z.string().optional(),
     location: z.string(),
     photo: z.string().optional().describe("Path relative to the CV JSON file"),
     /** Headlines the tailor may choose from; the first is the default. Anything else is never used. */
