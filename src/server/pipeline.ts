@@ -72,7 +72,7 @@ export function runPipeline(db: DatabaseSync, runId: number, price: (model: stri
   const measured: Record<StageKey, Measured> = {
     fetch: {
       metrics: run.kind === "vet" ? ["not part of this run"] : [
-        stats.fetch ? `${n(stats.fetch.boardPostings)} from ${n(stats.fetch.boards)} boards` : `${n(stats.postings)} postings`,
+        stats.fetch ? `${n(stats.fetch.boardPostings)} from ${n(stats.fetch.boards)} boards${stats.fetch.foundBoards ? ` (${n(stats.fetch.foundBoards)} found)` : ""}` : `${n(stats.postings)} postings`,
         ...(stats.fetch ? [`${n(stats.fetch.hn)} HN · ${n(stats.fetch.linkedin)} LinkedIn`] : []),
       ],
       headline: 0, ms: fetchEnd ? t(fetchEnd.at) - t(run.started_at) : null, cost: 0, calls: 0, errors: evs("fetch", "warn").length,

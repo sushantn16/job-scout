@@ -42,7 +42,7 @@ export async function processQueue(store: Store, cfg: Config, runId: number, can
     const cached = store.company(key, RESEARCH_MAX_AGE_DAYS) as CompanyProfile | null;
     if (cached) return Promise.resolve(cached);
     if (!inflight.has(key)) {
-      const name = cfg.companyNames[p.company] ?? p.company;
+      const name = store.companyName(p.company, cfg.companyNames);
       inflight.set(key, researchCompany({ name, slug: ["linkedin", "hn", "manual"].includes(p.source) ? undefined : p.company, postingText: description, postingUrl: p.url }, record)
         .then((profile) => (store.saveCompany(key, name, profile), profile))
         .catch((e: Error) => (store.event(runId, "research", `${name}: ${e.message}`, "warn"), null)));

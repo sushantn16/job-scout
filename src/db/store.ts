@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Screened } from "../filter/rules.ts";
 import type { EventStage } from "../pipeline/stages.ts";
+import type { AtsKind } from "../sources/ats.ts";
 import type { Posting } from "../sources/types.ts";
 
 // Job lifecycle. M1 writes `new`, `filtered` and `stale`; later stages are claimed by the LLM workers.
@@ -73,6 +74,14 @@ CREATE TABLE IF NOT EXISTS emails (
   run_id INTEGER,
   processed_at TEXT NOT NULL
 );
+-- Company job boards found from LinkedIn/HN jobs (src/pipeline/boards.ts); kind and slug are null when none was found.
+CREATE TABLE IF NOT EXISTS boards (
+  company_key TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT,
+  slug TEXT,
+  checked_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER REFERENCES runs(id),
@@ -128,7 +137,9 @@ export class Store {
     // `manual` marks a job you added by hand, which re-screening must leave queued.
     // `applied_at`, `replied_at` and `followed_up_at` time the application, for follow-ups and reply times.
     const jobColumns = [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"],
-      ["manual", "INTEGER NOT NULL DEFAULT 0"], ["applied_at", "TEXT"], ["replied_at", "TEXT"], ["followed_up_at", "TEXT"]] as const;
+      ["manual", "INTEGER NOT NULL DEFAULT 0"], ["applied_at", "TEXT"], ["replied_at", "TEXT"], ["followed_up_at", "TEXT"],
+      // The job's own posting on its company's board, for a job first seen on LinkedIn or HN.
+      ["board_url", "TEXT"]] as const;
     for (const [col, def] of jobColumns) if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
     // Jobs applied to before the dates were kept: read them from the status changes in the event log.
     if (!jobCols.has("applied_at")) {
@@ -181,7 +192,8 @@ export class Store {
   upsert(runId: number, s: Screened, fresh: boolean): { id: string; isNew: boolean } {
     const p = s.posting;
     const key = dedupeKey(p.company, p.title);
-    const existing = this.db.prepare("SELECT id FROM jobs WHERE dedupe_key = ?").get(key) as { id: string } | undefined;
+    // A board posting already known as a LinkedIn job's own posting is that job, even if the titles differ a little.
+    const existing = this.db.prepare("SELECT id FROM jobs WHERE dedupe_key = ? OR board_url = ?").get(key, p.url) as { id: string } | undefined;
     if (existing) {
       // Refresh fields the source may correct, but only from the source the job was stored from: a LinkedIn
       // sighting of an Ashby job must not overwrite Ashby's own dates. Status is decided once, at first sight.
@@ -321,6 +333,45 @@ export class Store {
        LIMIT ?`,
     ).all(...(only ?? []), limit) as unknown as JobRow[];
     return rows.map(toJob).map(({ id, posting }) => ({ id, posting }));
+  }
+
+  /** A company's display name: from the config, else from the board found for it, else as the source gave it. */
+  companyName(company: string, configured: Record<string, string>): string {
+    return configured[company] ?? (this.db.prepare("SELECT name FROM boards WHERE slug = ?").get(company) as { name: string } | undefined)?.name ?? company;
+  }
+
+  /** Boards found for companies, to scan alongside the configured ones. */
+  boards(): { kind: AtsKind; slug: string; name: string }[] {
+    return this.db.prepare("SELECT kind, slug, name FROM boards WHERE slug IS NOT NULL ORDER BY name").all() as never;
+  }
+
+  /** The board found for a company: undefined if not checked in `maxAgeDays`, null if checked and none found. */
+  board(key: string, maxAgeDays: number): { kind: AtsKind; slug: string } | null | undefined {
+    const row = this.db.prepare("SELECT kind, slug, checked_at FROM boards WHERE company_key = ?").get(key) as { kind: AtsKind | null; slug: string | null; checked_at: string } | undefined;
+    if (!row) return undefined;
+    if (row.kind && row.slug) return { kind: row.kind, slug: row.slug };
+    return Date.now() - Date.parse(row.checked_at) > maxAgeDays * 86_400_000 ? undefined : null;
+  }
+
+  saveBoard(key: string, name: string, found: { kind: AtsKind; slug: string } | null): void {
+    this.db.prepare("INSERT INTO boards (company_key, name, kind, slug, checked_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(company_key) DO UPDATE SET name = excluded.name, kind = excluded.kind, slug = excluded.slug, checked_at = excluded.checked_at")
+      .run(key, name, found?.kind ?? null, found?.slug ?? null, now());
+  }
+
+  /** Jobs worth finding on their company's board: seen only on LinkedIn, HN or a pasted link, and still in play. */
+  boardCandidates(): { id: string; company: string; title: string }[] {
+    return this.db.prepare(
+      `SELECT id, company, title FROM jobs WHERE source IN ('linkedin', 'hn', 'manual') AND board_url IS NULL
+       AND status IN ('needs_review', 'apply', 'maybe', 'cv_ready', 'applied', 'interview') ORDER BY first_seen DESC`,
+    ).all() as never;
+  }
+
+  setBoardUrl(id: string, url: string): void {
+    this.db.prepare("UPDATE jobs SET board_url = ? WHERE id = ?").run(url, id);
+  }
+
+  boardUrl(id: string): string | null {
+    return (this.db.prepare("SELECT board_url FROM jobs WHERE id = ?").get(id) as { board_url: string | null } | undefined)?.board_url ?? null;
   }
 
   hasEmail(messageId: string): boolean {

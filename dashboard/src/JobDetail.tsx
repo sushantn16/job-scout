@@ -105,6 +105,7 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
             <StatusPill status={job.status} />
             {job.location ? <span>{job.location}</span> : null}
             <a href={job.url} target="_blank" rel="noreferrer">Original posting ↗</a>
+            {job.board_url ? <a href={job.board_url} target="_blank" rel="noreferrer" title="Found on the company's own job board">Company's own posting ↗</a> : null}
             {job.tailor ? <a href={`/api/jobs/${id}/cv`} target="_blank" rel="noreferrer">CV (PDF) ↗</a> : null}
           </div>
         </div>

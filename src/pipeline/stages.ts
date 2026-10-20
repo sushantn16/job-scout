@@ -28,4 +28,4 @@ export type StageKey = (typeof DEFS)[number]["key"];
 export const STAGES: readonly (StageDef & { key: StageKey })[] = DEFS;
 
 /** What an event can be logged under: a stage, or one of the steps around them. */
-export type EventStage = StageKey | "run" | "aws" | "form" | "dashboard";
+export type EventStage = StageKey | "run" | "aws" | "form" | "dashboard" | "boards";

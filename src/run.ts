@@ -13,6 +13,7 @@ import { ensureAwsSession } from "./aws/session.ts";
 import { processInbox } from "./inbox/process.ts";
 import { printVetDigest, processQueue } from "./pipeline/process.ts";
 import { processTailoring, type TailorOutcome } from "./pipeline/tailoring.ts";
+import { discoverBoards } from "./pipeline/boards.ts";
 import { loadCandidate } from "./vet/candidate.ts";
 import type { EventStage } from "./pipeline/stages.ts";
 
@@ -51,7 +52,10 @@ const inbox = processInbox(store, cfg, runId).catch((e: Error) => (log("inbox", 
 
 try {
   log("run", `freshness window starts ${since.toISOString()}`);
-  const boards = (Object.keys(ATS) as AtsKind[]).flatMap((kind) => cfg.sources[kind].map((slug) => ({ kind, slug })));
+  // The configured boards, plus the ones found for companies first seen on LinkedIn or HN (src/pipeline/boards.ts).
+  const configured = (Object.keys(ATS) as AtsKind[]).flatMap((kind) => cfg.sources[kind].map((slug) => ({ kind, slug })));
+  const found = store.boards().filter((b) => !configured.some((c) => c.kind === b.kind && c.slug === b.slug));
+  const boards = [...configured, ...found];
   const fetched = await mapLimit(boards, 16, async ({ kind, slug }) => {
     try {
       return await ATS[kind](slug);
@@ -60,9 +64,10 @@ try {
       return [];
     }
   });
+  const byBoard = new Map(boards.map((b, i) => [`${b.kind}/${b.slug}`, fetched[i]!]));
   const postings = fetched.flat();
-  const fetchStats = { boards: boards.length, boardPostings: postings.length, hn: 0, linkedin: 0 };
-  log("fetch", `${postings.length} postings from ${boards.length} boards`);
+  const fetchStats = { boards: boards.length, foundBoards: found.length, boardPostings: postings.length, hn: 0, linkedin: 0 };
+  log("fetch", `${postings.length} postings from ${boards.length} boards${found.length ? ` (${found.length} found from LinkedIn and HN jobs)` : ""}`);
 
   if (cfg.sources.hn) {
     try {
@@ -116,6 +121,8 @@ try {
   if (llmConfigured && aws?.ok) {
     const candidate = loadCandidate();
     vetted = await processQueue(store, cfg, runId, candidate);
+    // Before tailoring, so a LinkedIn job found on its company's board gets its form read in this run.
+    await discoverBoards(store, runId, byBoard).catch((e: Error) => log("boards", `failed: ${e.message}`, "warn"));
     tailored = await processTailoring(store, cfg, runId, candidate);
   }
   else if (!llmConfigured) log("vet", "skipped: JOB_SCOUT_MODEL or data/private/preferences.json missing", "warn");

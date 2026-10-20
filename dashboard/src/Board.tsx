@@ -70,8 +70,8 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
   const replies = summary?.replyDays ?? [];
   const median = replies.length ? replies[Math.floor((replies.length - 1) / 2)]! : null;
   const waitingSub = [
-    summary?.followUpsDue ? `${summary.followUpsDue} due a follow-up` : `none due a follow-up (${summary?.followUpDays ?? 10} d)`,
-    median !== null ? `replies take ${median} d (median of ${replies.length})` : null,
+    summary?.followUpsDue ? `${summary.followUpsDue} to follow up` : "none to follow up",
+    median !== null ? `median reply ${median} d` : null,
   ].filter(Boolean).join(" · ");
   const columns = COLUMNS.filter((col) => !col.optional || jobs.some((j) => col.statuses.includes(j.status)));
 

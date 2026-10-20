@@ -80,6 +80,8 @@ export interface Cited { text: string; sourceUrl: string }
 
 export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary" | "flagged" | "findings" | "rejection" | "recruiter"> {
   description: string;
+  /** The job's own posting on its company's board, for a job first seen on LinkedIn or HN. */
+  board_url: string | null;
   signals: { german: { value: string; evidence: string }; years: { value: number | null; evidence: string }; band: { evidence: string }; bandTopEur: number | null; workplace: { value: string }; recruiter?: { value: boolean; evidence: string } } | null;
   rejections: string[];
   screen: { findings: Finding[]; needsReview: boolean } | null;

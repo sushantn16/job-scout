@@ -34,7 +34,7 @@ export interface TailorOutcome {
 
 export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candidate: Candidate, record?: (r: CallRecord) => void): Promise<TailorOutcome> {
   const { posting: p, vet } = job;
-  const companyName = cfg.companyNames[p.company] ?? p.company;
+  const companyName = store.companyName(p.company, cfg.companyNames);
   const company = store.company(companyKey(p.company), 365) as CompanyProfile | null;
   const tailored = await tailor({ candidate, vet, company, jobTitle: p.title, companyName }, record);
   const dir = applicationDir(companyName, p.title);

@@ -16,7 +16,12 @@ interface SearchSettings {
   vet: { applyAt: number; maybeAt: number };
 }
 interface Draft { search: SearchSettings; prefs: Prefs; answers: Record<string, string> }
-interface Loaded extends Omit<Draft, "prefs"> { prefs: Prefs | null; answerTopics: Record<string, string>; linkedinLocation: string }
+interface Loaded extends Omit<Draft, "prefs"> {
+  prefs: Prefs | null;
+  answerTopics: Record<string, string>;
+  linkedinLocation: string;
+  foundBoards: { kind: string; slug: string; name: string }[];
+}
 
 const EMPTY_PREFS: Prefs = { targetRoles: [], languages: "", location: "", compensation: "", culture: [], experience: "", knownGaps: [], aiFocus: "" };
 
@@ -153,6 +158,24 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           </label>
           <Button type="submit" className="mb-5" disabled={!city.trim()}>Add</Button>
         </form>
+      </Card>
+
+      <Card title={`Boards found automatically (${loaded.foundBoards.length})`} aside={<span className="text-xs font-normal text-muted">Scanned with the ones in the config file</span>}>
+        <p className="mb-2 mt-0 text-[13px] text-ink-2">
+          When a job you're interested in was only seen on LinkedIn or HN, job-scout looks for it on the company's own Ashby, Greenhouse, Lever or Personio
+          board. A board counts only when it lists that job; from then on it's scanned directly, and its posting gives the form a link to read.
+        </p>
+        {loaded.foundBoards.length ? (
+          <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+            {loaded.foundBoards.map((b) => (
+              <li key={`${b.kind}/${b.slug}`} className="rounded-full border border-line px-2.5 py-0.5 text-[12.5px]">
+                <span className="font-semibold">{b.name}</span> <span className="text-muted">{b.kind}/{b.slug}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="m-0 text-[13px] text-muted">None yet. The next run checks the companies of your LinkedIn and HN jobs.</p>
+        )}
       </Card>
 
       <Card title="Hard rules" aside={<span className="text-xs font-normal text-muted">Search filter</span>}>

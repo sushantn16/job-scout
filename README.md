@@ -26,6 +26,9 @@ can use tools.
 
 1. **Fetch** (code). The pipeline pulls every open posting from the boards in your config. Supported sources are the
    public job-board APIs of Ashby, Greenhouse, Lever and Personio, plus Hacker News "Who is hiring".
+   It also scans the boards it found for companies first seen on LinkedIn or HN: after scoring, a job still in play is
+   looked up on its company's own board (likely slugs on all four systems). A board counts only when it lists that job;
+   the job then gets its own posting's link, which the form reader follows.
 2. **Filter** (code). It keeps titles, locations and posting dates that match your config. It then reads the
    requirements straight from the posting text and drops jobs that:
    - require German;

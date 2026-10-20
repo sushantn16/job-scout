@@ -115,7 +115,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
          FROM jobs ${status === "all" ? "" : "WHERE status NOT IN ('filtered', 'stale')"}
          ORDER BY coalesce(json_extract(vet, '$.fitScore'), -1) DESC, posted DESC LIMIT 1000`,
       ).all() as { company: string }[];
-      json(res, 200, rows.map((r) => ({ ...r, companyName: cfg.companyNames[r.company] ?? r.company })));
+      json(res, 200, rows.map((r) => ({ ...r, companyName: store.companyName(r.company, cfg.companyNames) })));
     }],
 
     ["GET", /^\/api\/jobs\/(?<id>[0-9a-f]{16})$/, (_req, res, p) => {
@@ -126,7 +126,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       const appFile = tailor ? join(resolveOutput(tailor.dir), "application.md") : null;
       json(res, 200, {
         ...row,
-        companyName: cfg.companyNames[row.company ?? ""] ?? row.company,
+        companyName: store.companyName(row.company ?? "", cfg.companyNames),
         signals: parse(row.signals ?? null),
         rejections: parse(row.rejections ?? null),
         hidden: parse(row.hidden ?? null),
@@ -227,6 +227,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
         answers: loadAnswers(),
         answerTopics: STANDARD,
         linkedinLocation: cfg.linkedin.location,
+        foundBoards: store.boards(),
       });
     }],
 
@@ -271,7 +272,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
            j.company, j.title, j.status AS job_status
          FROM emails e LEFT JOIN jobs j ON j.id = e.job_id ORDER BY e.received_at DESC LIMIT 200`,
       ).all() as { company: string | null }[];
-      json(res, 200, rows.map((r) => ({ ...r, companyName: r.company ? (cfg.companyNames[r.company] ?? r.company) : null })));
+      json(res, 200, rows.map((r) => ({ ...r, companyName: r.company ? store.companyName(r.company, cfg.companyNames) : null })));
     }],
 
     // Undo an automatic status change, if the job is still where the email put it.
