@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Screened } from "../filter/rules.ts";
+import type { EventStage } from "../pipeline/stages.ts";
 import type { Posting } from "../sources/types.ts";
 
 // Job lifecycle. M1 writes `new`, `filtered` and `stale`; later stages are claimed by the LLM workers.
@@ -97,6 +98,19 @@ export const companyKey = (company: string) => norm(company).replace(/ /g, "");
 
 export const dedupeKey = (company: string, title: string) => `${norm(company).replace(/ /g, "")}|${norm(title)}`;
 
+type JobRow = Omit<Posting, "hiddenText"> & { id: string; status: JobStatus; first_run: number; manual: number; hidden: string };
+
+/** A stored job as the pipeline reads it. */
+export interface StoredJob { id: string; status: JobStatus; firstRun: number; manual: boolean; posting: Posting }
+
+const toJob = ({ id, status, first_run, manual, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }: JobRow): StoredJob => ({
+  id,
+  status,
+  firstRun: first_run,
+  manual: manual === 1,
+  posting: { source, company, title, location, url, description, comp, workplace, applicants, posted, hiddenText: JSON.parse(hidden) as string[] },
+});
+
 export class Store {
   readonly db: DatabaseSync;
 
@@ -144,7 +158,7 @@ export class Store {
     this.db.prepare("UPDATE runs SET finished_at = ?, status = ?, stats = ? WHERE id = ?").run(now(), status, JSON.stringify(stats), id);
   }
 
-  event(runId: number, stage: string, message: string, level: "info" | "warn" | "error" = "info", jobId?: string): void {
+  event(runId: number, stage: EventStage, message: string, level: "info" | "warn" | "error" = "info", jobId?: string): void {
     this.db.prepare("INSERT INTO events (run_id, job_id, at, level, stage, message) VALUES (?, ?, ?, ?, ?, ?)")
       .run(runId, jobId ?? null, now(), level, stage, message);
   }
@@ -198,19 +212,14 @@ export class Store {
   }
 
   /** Stored postings in the given statuses, for re-screening after a rule or config change. */
-  postings(statuses: JobStatus[]): { id: string; firstRun: number; manual: boolean; posting: Posting }[] {
+  postings(statuses: JobStatus[]): StoredJob[] {
     const rows = this.db.prepare(`SELECT * FROM jobs WHERE status IN (${statuses.map(() => "?").join(",")})`).all(...statuses);
-    return (rows as unknown as (Omit<Posting, "hiddenText"> & { id: string; first_run: number; manual: number; hidden: string })[]).map(({ id, first_run, manual, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }) => ({
-      id,
-      firstRun: first_run,
-      manual: manual === 1,
-      posting: { source, company, title, location, url, description, comp, workplace, applicants, posted, hiddenText: JSON.parse(hidden) as string[] },
-    }));
+    return (rows as unknown as JobRow[]).map(toJob);
   }
 
   posting(id: string): Posting | null {
-    const all = this.postings(["new", "filtered", "stale", "screened", "needs_review", "apply", "maybe", "skip", "cv_ready", "applied", "interview", "rejected", "dismissed"]);
-    return all.find((p) => p.id === id)?.posting ?? null;
+    const row = this.db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as JobRow | undefined;
+    return row ? toJob(row).posting : null;
   }
 
   updateScreen(id: string, s: Screened, fresh: boolean): void {
@@ -269,13 +278,11 @@ export class Store {
   queue(limit: number, only?: string[]): { id: string; posting: Posting }[] {
     const where = only?.length ? `AND id IN (${only.map(() => "?").join(",")})` : "";
     const rows = this.db.prepare(
-      `SELECT id FROM jobs WHERE status = 'new' ${where}
+      `SELECT * FROM jobs WHERE status = 'new' ${where}
        ORDER BY coalesce(json_extract(signals, '$.bandTopEur'), 0) DESC, coalesce(json_extract(signals, '$.applicants'), 100) ASC, posted DESC
        LIMIT ?`,
-    ).all(...(only ?? []), limit) as { id: string }[];
-    const ids = new Set(rows.map((r) => r.id));
-    const all = this.postings(["new"]).filter((p) => ids.has(p.id));
-    return rows.map((r) => all.find((p) => p.id === r.id)!).map(({ id, posting }) => ({ id, posting }));
+    ).all(...(only ?? []), limit) as unknown as JobRow[];
+    return rows.map(toJob).map(({ id, posting }) => ({ id, posting }));
   }
 
   hasEmail(messageId: string): boolean {

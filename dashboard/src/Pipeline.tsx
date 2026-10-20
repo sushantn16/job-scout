@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { duration, usd, usePoll, type Run } from "./api";
-import { Diagram } from "./Diagram";
+import { duration, usd, usePoll, type PipelineStage as Stage, type Run } from "./api";
+import { Diagram, KindTag } from "./Diagram";
 import { Log, RunHistory } from "./Runs";
 import { Banner, Button, Card, cx, Pill, RunPill, Section } from "./ui";
 
-type StageStatus = "done" | "running" | "waiting" | "skipped" | "idle" | "failed";
-interface Stage { key: string; name: string; does: string; status: StageStatus; metrics: string[]; ms: number | null; cost: number; calls: number; errors: number }
+type StageStatus = Stage["status"];
 
 const TONE = { done: "good", running: "info", waiting: "neutral", skipped: "neutral", idle: "neutral", failed: "critical" } as const;
 const LABEL: Record<StageStatus, string> = { done: "Done", running: "Running", waiting: "Waiting", skipped: "Not in this run", idle: "Nothing new", failed: "Failed" };
@@ -25,6 +24,8 @@ function StageCard({ s, i }: { s: Stage; i: number }) {
       <div className="flex items-center gap-2">
         <span className="inline-grid size-5 place-items-center rounded-full bg-hover text-[11.5px] text-ink-2">{i + 1}</span>
         <span className="font-semibold">{s.name}</span>
+        <span className="flex-1" />
+        <KindTag kind={s.kind} />
       </div>
       <div><Pill tone={TONE[s.status]} pulse={s.status === "running"}>{LABEL[s.status]}</Pill></div>
       <div className="text-xs text-muted">{s.does}</div>

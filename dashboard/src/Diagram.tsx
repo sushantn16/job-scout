@@ -1,32 +1,32 @@
 // The whole pipeline as one block diagram, loop included: job boards in, the main line inside the pipeline boundary
 // (wrapping onto a second row), you apply, replies come back through Gmail into the Inbox, and outcomes feed back into
 // scoring. Live: each block shows its status and key number for the selected run; the stage cards below carry the same
-// numbers as text.
+// numbers as text. Stage names, descriptions and kinds come from the API (src/pipeline/stages.ts); only the layout and
+// the three blocks outside the pipeline are defined here.
+import type { PipelineStage as Stage } from "./api";
 import { cx } from "./ui";
 
-interface Stage { key: string; name: string; status: string; metrics: string[] }
-type Kind = "code" | "LLM" | "outside";
+type Kind = Stage["kind"] | "outside";
 type Block = { key: string; x: number; y: number; title: string; does: string; kind: Kind };
 
 const W = 168;
 const H = 110;
 const ROW = [92, 272, 452];
-const BLOCKS: Block[] = [
+/** Where each stage's block sits. */
+const AT: Record<string, { x: number; y: number }> = {
+  fetch: { x: 232, y: ROW[0]! }, filter: { x: 426, y: ROW[0]! }, screen: { x: 620, y: ROW[0]! }, research: { x: 814, y: ROW[0]! },
+  vet: { x: 329, y: ROW[1]! }, tailor: { x: 523, y: ROW[1]! }, ready: { x: 717, y: ROW[1]! },
+  inbox: { x: 717, y: ROW[2]! }, outcomes: { x: 523, y: ROW[2]! },
+};
+const OUTSIDE: Block[] = [
   { key: "in", x: 16, y: ROW[0]!, title: "Job boards", does: "Ashby, Greenhouse, Lever, Personio, HN, LinkedIn", kind: "outside" },
-  { key: "fetch", x: 232, y: ROW[0]!, title: "Fetch", does: "Pull every posting from the configured boards", kind: "code" },
-  { key: "filter", x: 426, y: ROW[0]!, title: "Filter", does: "Title, location, German, years, pay, freshness", kind: "code" },
-  { key: "screen", x: 620, y: ROW[0]!, title: "Injection screen", does: "Text aimed at AI: patterns, then an LLM check", kind: "LLM" },
-  { key: "research", x: 814, y: ROW[0]!, title: "Research", does: "Company website, news, HN; every claim cited", kind: "LLM" },
-  { key: "vet", x: 329, y: ROW[1]!, title: "Score", does: "LLM rates the rubric; the formula decides", kind: "LLM" },
-  { key: "tailor", x: 523, y: ROW[1]!, title: "Tailor", does: "CV, why-us, note, form answers; fact-checked", kind: "LLM" },
-  { key: "ready", x: 717, y: ROW[1]!, title: "Ready", does: "Application folder written", kind: "code" },
   { key: "you", x: 1032, y: ROW[1]!, title: "You", does: "Review, then apply on the company's site", kind: "outside" },
   { key: "gmail", x: 1032, y: ROW[2]!, title: "Gmail", does: "Replies: confirmations, rejections, interviews", kind: "outside" },
-  { key: "inbox", x: 717, y: ROW[2]!, title: "Inbox", does: "Match replies to jobs; rules only, read-only", kind: "code" },
-  { key: "outcomes", x: 523, y: ROW[2]!, title: "Outcomes", does: "Applied, interview, rejected: the funnel", kind: "code" },
 ];
-// The headline number for each block, picked from the stage's metric lines.
-const HEADLINE: Record<string, number> = { fetch: 0, filter: 1, screen: 0, research: 0, vet: 1, tailor: 0, ready: 0, inbox: 1, outcomes: 0 };
+
+export const KindTag = ({ kind }: { kind: Stage["kind"] }) => (
+  <span className={cx("rounded-full border px-1.5 text-[10.5px] font-medium", kind === "LLM" ? "border-accent text-accent-ink" : "border-line text-ink-2")}>{kind}</span>
+);
 
 const RECT: Record<string, string> = {
   done: "fill-raised stroke-accent",
@@ -40,6 +40,7 @@ const RECT: Record<string, string> = {
 
 export function Diagram({ stages }: { stages: Stage[] }) {
   const byKey = new Map(stages.map((s) => [s.key, s]));
+  const BLOCKS: Block[] = [...OUTSIDE, ...stages.filter((s) => AT[s.key]).map((s) => ({ key: s.key, ...AT[s.key]!, title: s.name, does: s.does, kind: s.kind }))];
   const at = (key: string) => BLOCKS.find((b) => b.key === key)!;
   const status = (b: Block) => (b.kind === "outside" ? "outside" : (byKey.get(b.key)?.status ?? "waiting"));
   const flowed = (key: string) => {
@@ -64,7 +65,7 @@ export function Diagram({ stages }: { stages: Stage[] }) {
   const v = at("vet");
   const you = at("you");
   const o = at("outcomes");
-  const summary = stages.map((s) => `${s.name}: ${s.status}${s.metrics[HEADLINE[s.key] ?? 0] ? `, ${s.metrics[HEADLINE[s.key] ?? 0]}` : ""}`).join("; ");
+  const summary = stages.map((s) => `${s.name}: ${s.status}${s.headline ? `, ${s.headline}` : ""}`).join("; ");
 
   return (
     <svg className="block h-auto w-full" viewBox="0 0 1216 620" role="img" aria-label={`Pipeline: ${summary}`}>
@@ -101,7 +102,7 @@ export function Diagram({ stages }: { stages: Stage[] }) {
       {BLOCKS.map((b) => {
         const s = byKey.get(b.key);
         const st = status(b);
-        const headline = s?.metrics[HEADLINE[b.key] ?? 0];
+        const headline = s?.headline;
         return (
           <g key={b.key} className={cx(["waiting", "idle", "skipped"].includes(st) && "opacity-60")}>
             <title>{`${b.title}: ${b.does}${s ? `. ${s.status}. ${s.metrics.join(", ")}` : ""}`}</title>
@@ -110,9 +111,7 @@ export function Diagram({ stages }: { stages: Stage[] }) {
               <div className="box-border flex h-full flex-col gap-[3px] px-2.5 py-2 text-xs text-ink">
                 <div className="flex items-center justify-between gap-1.5 text-[13px] font-semibold">
                   <span>{b.title}</span>
-                  {b.kind !== "outside" ? (
-                    <span className={cx("rounded-full border px-1.5 text-[10.5px] font-medium", b.kind === "LLM" ? "border-accent text-accent-ink" : "border-line text-ink-2")}>{b.kind}</span>
-                  ) : null}
+                  {b.kind !== "outside" ? <KindTag kind={b.kind} /> : null}
                 </div>
                 <div className="text-[11.5px] leading-snug text-muted">{b.does}</div>
                 {headline ? <div className="mt-auto text-[12.5px] font-semibold">{headline}</div> : null}

@@ -14,6 +14,7 @@ import { processInbox } from "./inbox/process.ts";
 import { printVetDigest, processQueue } from "./pipeline/process.ts";
 import { processTailoring, type TailorOutcome } from "./pipeline/tailoring.ts";
 import { loadCandidate } from "./vet/candidate.ts";
+import type { EventStage } from "./pipeline/stages.ts";
 
 interface LinkedInModule {
   linkedinSearch(o: object, errors: string[]): Promise<Posting[]>;
@@ -31,7 +32,7 @@ const store = new Store();
 const started = new Date();
 const since = windowStart(started, store.lastSuccessfulRunStart(), cfg.freshness.minHours, cfg.freshness.maxHours);
 const runId = store.startRun(since);
-const log = (stage: string, msg: string, level: "info" | "warn" | "error" = "info") => {
+const log = (stage: EventStage, msg: string, level: "info" | "warn" | "error" = "info") => {
   store.event(runId, stage, msg, level);
   if (level !== "info") console.error(`[${stage}] ${msg}`);
 };

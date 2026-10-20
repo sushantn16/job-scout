@@ -49,6 +49,22 @@ export interface JobRow {
   rejection: string | null;
 }
 
+/** One stage of a run, as /api/pipeline sends it; the stages are defined once, in src/pipeline/stages.ts. */
+export interface PipelineStage {
+  key: string;
+  name: string;
+  kind: "code" | "LLM";
+  does: string;
+  status: "done" | "running" | "waiting" | "skipped" | "idle" | "failed";
+  metrics: string[];
+  /** The metric the diagram shows on the stage's block. */
+  headline: string | null;
+  ms: number | null;
+  cost: number;
+  calls: number;
+  errors: number;
+}
+
 export interface Factor { factor: string; weight: number; value: number; points: number; basis: string }
 export interface Finding { layer: "pattern" | "llm"; kind: string; quote: string; intent?: string }
 export interface Cited { text: string; sourceUrl: string }
