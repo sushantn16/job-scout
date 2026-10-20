@@ -42,7 +42,7 @@
     "remoteEu": "remote.{0,40}(europe|emea|\\beu\\b|cet|anywhere|worldwide|global)|(europe|emea|\\beu\\b).{0,20}remote"
   },
   "titleInclude": "product engineer|full[- ]?stack|frontend|front[- ]end|software engineer|ai engineer|applied ai|forward[- ]deployed|founding engineer|design engineer|web engineer|llm engineer|typescript|member of technical staff|engineer.*(agent|\\bai\\b|llm)",
-  "titleExclude": "intern\\b|internship|working student|werkstudent|junior|manager|director|head of|principal|staff|vp\\b|android|ios\\b|mobile|react native|embedded|firmware|security|data engineer|data scientist|research|sre\\b|site reliability|devops|platform engineer|infrastructure|\\bqa\\b|test|sales|account|support|recruit|java\\b|golang|\\bgo\\b|rust|c\\+\\+|\\.net|php|angular|svelte|kernel|hardware|robot|network|database|solutions architect|consultant|entwickler|lead\\b",
+  "titleExclude": "intern\\b|internship|working student|werkstudent|junior|manager|director|head of|principal|staff|vp\\b|android|ios\\b|mobile|react native|embedded|firmware|security|data engineer|data scientist|research|sre\\b|site reliability|devops|platform engineer|infrastructure|\\bqa\\b|test|sales|account|support|recruit|java\\b|golang|\\bgo\\b|rust|c\\+\\+|\\.net|php|angular|svelte|kernel|hardware|robot|network|database|solutions architect|consultant|entwickler|lead\\b|mechanical|structural|civil engineer|electrical|substation|high voltage|antenna|\\brf\\b|\\basic\\b|fpga|silicon|semiconductor|\\bcreo\\b|\\bcad\\b|hvac|task creator|ai (?:trainer|tutor)|annotat",
   "companyExclude": "instaffo|smartclip|michael page|forsyth barnes|european tech recruit|xcede|fullstack talents|hays|randstad",
   "sources": {
     "ashby": [
