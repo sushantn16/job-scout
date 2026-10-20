@@ -72,7 +72,7 @@ export function Card({ title, aside, children, className }: { title?: ReactNode;
 /** A row of headline numbers in one bordered strip. */
 export function Stats({ items }: { items: { label: string; value: ReactNode; sub?: ReactNode }[] }) {
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]">
       {items.map((i) => (
         <div key={i.label} className="bg-surface px-4 py-3">
           <div className="text-[12.5px] text-ink-2">{i.label}</div>

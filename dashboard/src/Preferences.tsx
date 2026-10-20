@@ -12,6 +12,7 @@ interface SearchSettings {
   titleInclude: string;
   titleExclude: string;
   companyExclude: string;
+  followUpDays: number;
   vet: { applyAt: number; maybeAt: number };
 }
 interface Draft { search: SearchSettings; prefs: Prefs; answers: Record<string, string> }
@@ -181,11 +182,15 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           <Field label="Maybe at a score of" hint="Below this, a job is skipped">
             <input className={input} type="number" min={0} max={100} value={search.vet.maybeAt} onChange={(e) => setSearch({ vet: { ...search.vet, maybeAt: Number(e.target.value) } })} />
           </Field>
-          <div className="grid content-end">
-            <Button disabled={dirty || running} onClick={rescreen} title={dirty ? "Save first" : "Applies the filters to queued, filtered and older jobs; no LLM calls"}>
-              Re-check stored jobs
-            </Button>
-          </div>
+          <Field label="Follow up after (days)" hint="Applications with no reply by then get a reminder">
+            <input className={input} type="number" min={1} max={60} value={search.followUpDays} onChange={(e) => setSearch({ followUpDays: Number(e.target.value) })} />
+          </Field>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button disabled={dirty || running} onClick={rescreen} title={dirty ? "Save first" : "Applies the filters to queued, filtered and older jobs; no LLM calls"}>
+            Re-check stored jobs
+          </Button>
+          <span className="text-xs text-muted">Applies saved filters to jobs already stored. No LLM calls.</span>
         </div>
       </Card>
 

@@ -126,8 +126,17 @@ export class Store {
     const jobCols = new Set((this.db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
     // Columns added after the first schema; each stage stores its full JSON result for the dashboard.
     // `manual` marks a job you added by hand, which re-screening must leave queued.
-    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"], ["manual", "INTEGER NOT NULL DEFAULT 0"]] as const)
-      if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
+    // `applied_at`, `replied_at` and `followed_up_at` time the application, for follow-ups and reply times.
+    const jobColumns = [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"],
+      ["manual", "INTEGER NOT NULL DEFAULT 0"], ["applied_at", "TEXT"], ["replied_at", "TEXT"], ["followed_up_at", "TEXT"]] as const;
+    for (const [col, def] of jobColumns) if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
+    // Jobs applied to before the dates were kept: read them from the status changes in the event log.
+    if (!jobCols.has("applied_at")) {
+      const first = (to: string) => `(SELECT min(at) FROM events e WHERE e.job_id = jobs.id AND e.message LIKE '%→ ${to}%')`;
+      this.db.exec(`UPDATE jobs SET applied_at = coalesce(${first("applied")}, ${first("interview")}, ${first("rejected")}) WHERE status IN ('applied', 'interview', 'rejected')`);
+      this.db.exec(`UPDATE jobs SET replied_at = min(coalesce(${first("interview")}, '~'), coalesce(${first("rejected")}, '~')) WHERE status IN ('interview', 'rejected')`);
+      this.db.exec("UPDATE jobs SET replied_at = NULL WHERE replied_at = '~'");
+    }
     const callCols = new Set((this.db.prepare("PRAGMA table_info(llm_calls)").all() as { name: string }[]).map((c) => c.name));
     for (const col of ["cache_read_tokens", "cache_write_tokens"])
       if (!callCols.has(col)) this.db.exec(`ALTER TABLE llm_calls ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
@@ -233,8 +242,32 @@ export class Store {
       .all(`%${company}%`, `%${title}%`) as never;
   }
 
+  /**
+   * Also keeps the application's dates: applying sets `applied_at` once, the first interview or rejection sets
+   * `replied_at`, and moving back before applying (an undo, a re-vet) clears them.
+   */
   setStatus(id: string, status: JobStatus): void {
-    this.db.prepare("UPDATE jobs SET status = ? WHERE id = ?").run(status, id);
+    const sent = ["applied", "interview", "rejected"].includes(status);
+    const replied = status === "interview" || status === "rejected";
+    const t = now();
+    this.db.prepare(
+      `UPDATE jobs SET status = ?,
+         applied_at = CASE WHEN ? THEN coalesce(applied_at, ?) END,
+         replied_at = CASE WHEN ? THEN coalesce(replied_at, ?) END,
+         followed_up_at = CASE WHEN ? THEN followed_up_at END
+       WHERE id = ?`,
+    ).run(status, sent ? 1 : 0, t, replied ? 1 : 0, t, sent ? 1 : 0, id);
+  }
+
+  /** You chased an application up: the follow-up reminder starts again from today. */
+  markFollowedUp(id: string): void {
+    this.db.prepare("UPDATE jobs SET followed_up_at = ? WHERE id = ? AND status = 'applied'").run(now(), id);
+  }
+
+  /** Applications with no reply since they were sent, or last followed up, `days` or more ago. */
+  followUpsDue(days: number): { id: string; company: string; title: string }[] {
+    const before = new Date(Date.now() - days * 86_400_000).toISOString();
+    return this.db.prepare("SELECT id, company, title FROM jobs WHERE status = 'applied' AND coalesce(followed_up_at, applied_at) <= ?").all(before) as never;
   }
 
   company(key: string, maxAgeDays: number): unknown | null {

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { euro, post, usd, usePoll, type JobDetail as Job, type Status } from "./api";
+import { ago, euro, post, usd, usePoll, type JobDetail as Job, type Status } from "./api";
 import { ScoreBreakdown } from "./charts";
 import { Markdown } from "./Markdown";
 import { FormPanel } from "./FormPanel";
@@ -112,6 +112,11 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
             <Button key={a.to} variant={a.primary ? "primary" : "default"} disabled={busy} onClick={() => setStatus(a.to)}>{a.label}</Button>
           ))}
           {job.status === "apply" ? <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/tailor"), "Tailoring started")}>Tailor now</Button> : null}
+          {job.status === "applied" ? (
+            <Button disabled={busy} onClick={() => act(() => post(`/api/jobs/${id}/followed-up`), "Noted. The follow-up reminder starts again today")} title="Record that you chased this application up">
+              Followed up
+            </Button>
+          ) : null}
           {job.status === "new" ? (
             <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/vet"), "Scoring the queue; this page updates when it's done")}>Score now</Button>
           ) : (
@@ -239,6 +244,11 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
                 ["German", s?.german.value ?? "–"],
                 ["Applicants", job.applicants || "unknown"],
                 ["Posted", job.posted ? job.posted.slice(0, 10) : "unknown"],
+                ...(job.applied_at ? ([["Applied", `${job.applied_at.slice(0, 10)} (${ago(job.applied_at)})`]] as [string, ReactNode][]) : []),
+                ...(job.followed_up_at ? ([["Followed up", job.followed_up_at.slice(0, 10)]] as [string, ReactNode][]) : []),
+                ...(job.replied_at && job.applied_at
+                  ? ([["Reply", `after ${Math.round(((Date.parse(job.replied_at) - Date.parse(job.applied_at)) / 86_400_000) * 10) / 10} d`]] as [string, ReactNode][])
+                  : []),
                 ["Source", job.manual ? (job.source === "manual" ? "added by you" : `added by you (${job.source})`) : job.source],
                 ["LLM cost", usd(job.cost)],
                 ...(job.rejections.length ? ([["Hard rules", job.rejections.join("; ")]] as [string, ReactNode][]) : []),

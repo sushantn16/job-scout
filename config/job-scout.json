@@ -5,6 +5,7 @@
     "minBandTopEur": 80000,
     "germanBlocksAt": "required"
   },
+  "followUpDays": 10,
   "caps": {
     "vetPerRun": 15,
     "tailorPerRun": 5

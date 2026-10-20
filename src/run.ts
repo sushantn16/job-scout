@@ -136,12 +136,14 @@ try {
   const ready = tailored.filter((t) => !t.error).length;
   const review = vetted?.stats.needsReview ?? 0;
   const failed = (vetted?.stats.errors ?? 0) + tailored.filter((t) => t.error).length;
+  const chase = store.followUpsDue(cfg.followUpDays).length;
   notify(
     [
       replies?.interviews ? `${replies.interviews} interview invite${replies.interviews > 1 ? "s" : ""}!` : "",
       replies?.rejections ? `${replies.rejections} rejection${replies.rejections > 1 ? "s" : ""}` : "",
       ready || review ? [ready ? `${ready} application${ready > 1 ? "s" : ""} ready` : "", review ? `${review} need${review > 1 ? "" : "s"} review` : ""].filter(Boolean).join(", ") : `No new matches (${stats.new} new jobs checked)`,
       failed ? `${failed} job(s) failed, see the dashboard` : "",
+      chase ? `${chase} application${chase > 1 ? "s" : ""} due a follow-up` : "",
     ].filter(Boolean).join(". ") + ". http://127.0.0.1:8765",
   );
   if (tailored.length) console.log(`\nApplications ready:\n${tailored.map((t) => `  ${t.error ? `ERROR ${t.error}` : t.dir}`).join("\n")}`);

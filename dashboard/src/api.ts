@@ -22,6 +22,10 @@ export interface Summary {
   running: Run | null;
   pricingNote: string;
   nextWindowStart: string;
+  followUpDays: number;
+  followUpsDue: number;
+  /** Days from applying to the first reply, one entry per application that got one, ascending. */
+  replyDays: number[];
 }
 
 export interface JobRow {
@@ -39,6 +43,9 @@ export interface JobRow {
   applicants: string;
   location: string;
   first_seen: string;
+  applied_at: string | null;
+  replied_at: string | null;
+  followed_up_at: string | null;
   bandTopEur: number | null;
   workplace: string | null;
   score: number | null;
@@ -165,6 +172,12 @@ export function usePoll<T>(path: string | null, ms: number): { data: T | null; e
   }, [load, ms]);
   return { data, error, refresh: load };
 }
+
+/** Whether an application has waited `days` without a reply since it was sent or last followed up. */
+export const followUpDue = (j: Pick<JobRow, "status" | "applied_at" | "followed_up_at">, days: number) => {
+  const since = j.followed_up_at ?? j.applied_at;
+  return j.status === "applied" && since !== null && Date.now() - Date.parse(since) >= days * 86_400_000;
+};
 
 export const euro = (n: number | null) => (n == null ? "–" : `€${Math.round(n / 1000)}K`);
 export const usd = (n: number) => (n < 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(n < 10 ? 2 : 0)}`);

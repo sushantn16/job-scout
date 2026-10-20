@@ -1,7 +1,7 @@
 // The board: one column per stage, best score first. Drag a card to the next stage to change its status, or onto the
 // dismiss bar that appears while dragging; every move is also a button on the job's page, for keyboard use.
 import { useState, type DragEvent } from "react";
-import { ago, euro, post, usd, type JobRow, type Status, type Summary } from "./api";
+import { ago, euro, followUpDue, post, usd, type JobRow, type Status, type Summary } from "./api";
 import { statsLine } from "./Runs";
 import { Button, cx, Pill, Stats } from "./ui";
 
@@ -28,8 +28,10 @@ const DISMISSABLE: Status[] = ["needs_review", "apply", "cv_ready", "maybe", "sk
 /** A long column shows this many cards, best first, until you ask for the rest. */
 const SHOWN = 8;
 
-function JobCard({ job, open, onDrag }: { job: JobRow; open: Open; onDrag: (j: JobRow | null) => void }) {
-  const meta = [job.workplace && job.workplace !== "unknown" ? job.workplace : null, job.bandTopEur ? `to ${euro(job.bandTopEur)}` : null, job.posted ? ago(job.posted) : null].filter(Boolean);
+function JobCard({ job, open, onDrag, followUpDays }: { job: JobRow; open: Open; onDrag: (j: JobRow | null) => void; followUpDays: number }) {
+  // Once you've applied, when you applied matters more than when the job was posted.
+  const when = job.applied_at ? `applied ${ago(job.applied_at)}` : job.posted ? ago(job.posted) : null;
+  const meta = [job.workplace && job.workplace !== "unknown" ? job.workplace : null, job.bandTopEur ? `to ${euro(job.bandTopEur)}` : null, when].filter(Boolean);
   return (
     <button
       draggable
@@ -51,6 +53,7 @@ function JobCard({ job, open, onDrag }: { job: JobRow; open: Open; onDrag: (j: J
         {job.status === "apply" ? <Pill tone="info">Not tailored yet</Pill> : null}
         {job.manual ? <Pill>Added by you</Pill> : null}
         {job.flagged ? <Pill tone="warning">AI-directed text</Pill> : null}
+        {followUpDue(job, followUpDays) ? <Pill tone="warning">Follow up</Pill> : null}
         {meta.map((m) => <span key={m}>{m}</span>)}
       </div>
     </button>
@@ -63,6 +66,12 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const c = summary?.counts ?? {};
   const last = summary?.runs.find((r) => r.kind === "scan" && r.status !== "running");
+  const replies = summary?.replyDays ?? [];
+  const median = replies.length ? replies[Math.floor((replies.length - 1) / 2)]! : null;
+  const waitingSub = [
+    summary?.followUpsDue ? `${summary.followUpsDue} due a follow-up` : `none due a follow-up (${summary?.followUpDays ?? 10} d)`,
+    median !== null ? `replies take ${median} d (median of ${replies.length})` : null,
+  ].filter(Boolean).join(" · ");
   const columns = COLUMNS.filter((col) => !col.optional || jobs.some((j) => col.statuses.includes(j.status)));
 
   const move = (job: JobRow, to: Status, done: string) =>
@@ -89,6 +98,7 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
         items={[
           { label: "Ready to apply", value: (c.cv_ready ?? 0) + (c.apply ?? 0), sub: `${c.cv_ready ?? 0} with a tailored CV` },
           { label: "Applied", value: (c.applied ?? 0) + (c.interview ?? 0) + (c.rejected ?? 0), sub: `${c.interview ?? 0} interview${c.interview === 1 ? "" : "s"} · ${c.rejected ?? 0} rejected` },
+          { label: "Waiting for a reply", value: c.applied ?? 0, sub: waitingSub },
           { label: "To decide", value: c.maybe ?? 0, sub: `${c.skip ?? 0} skipped by the score` },
           { label: "LLM spend, 30 days", value: summary ? usd(summary.cost30d) : "–", sub: summary?.pricingNote ? "list prices, see config" : undefined },
         ]}
@@ -121,7 +131,7 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
                 <span>{col.title}</span>
                 <span className="tabular-nums">{list.length}</span>
               </h2>
-              {list.length ? (all ? list : list.slice(0, SHOWN)).map((j) => <JobCard key={j.id} job={j} open={open} onDrag={setDragging} />) : (
+              {list.length ? (all ? list : list.slice(0, SHOWN)).map((j) => <JobCard key={j.id} job={j} open={open} onDrag={setDragging} followUpDays={summary?.followUpDays ?? 10} />) : (
                 <div className="px-1 py-1.5 text-[12.5px] text-muted">{ok ? "Drop here" : "Nothing here"}</div>
               )}
               {list.length > SHOWN ? (

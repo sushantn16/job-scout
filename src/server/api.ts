@@ -90,6 +90,10 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
         cost30d: cost(db.prepare(`${usageSql} WHERE at >= ? GROUP BY model`).all(since) as never),
         running: runs.find((r) => (r as unknown as { status: string }).status === "running") ?? null,
         pricingNote: cfg.pricing.default!.note ?? "",
+        followUpDays: cfg.followUpDays,
+        followUpsDue: store.followUpsDue(cfg.followUpDays).length,
+        // Days from applying to the first interview invite or rejection, for every application that got one.
+        replyDays: (db.prepare("SELECT julianday(replied_at) - julianday(applied_at) AS d FROM jobs WHERE replied_at IS NOT NULL AND applied_at IS NOT NULL ORDER BY d").all() as { d: number }[]).map((r) => Math.round(r.d * 10) / 10),
         // How far back the next pipeline run will look: since the last run, at least a day, at most the cap.
         nextWindowStart: windowStart(new Date(), store.lastSuccessfulRunStart(), cfg.freshness.minHours, cfg.freshness.maxHours).toISOString(),
       });
@@ -102,7 +106,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     ["GET", /^\/api\/jobs$/, (_req, res, _p, q) => {
       const status = q.get("status");
       const rows = db.prepare(
-        `SELECT id, company, title, status, source, manual, url, posted, applicants, location, first_seen,
+        `SELECT id, company, title, status, source, manual, url, posted, applicants, location, first_seen, applied_at, replied_at, followed_up_at,
            json_extract(signals, '$.bandTopEur') AS bandTopEur, json_extract(signals, '$.workplace.value') AS workplace,
            json_extract(vet, '$.fitScore') AS score, json_extract(vet, '$.decision') AS decision, json_extract(vet, '$.summary') AS summary,
            json_extract(screen, '$.needsReview') AS flagged, json_array_length(json_extract(screen, '$.findings')) AS findings,
@@ -187,6 +191,14 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       json(res, 200, { id: p.id, from: row.status, to: status });
     }],
 
+    ["POST", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/followed-up$/, (_req, res, p) => {
+      const row = db.prepare("SELECT status FROM jobs WHERE id = ?").get(p.id!) as { status: string } | undefined;
+      if (row?.status !== "applied") return json(res, 400, { error: "only an application waiting for a reply can be followed up" });
+      store.markFollowedUp(p.id!);
+      store.event(store.latestRunId(), "dashboard", "followed up", "info", p.id!);
+      json(res, 200, { ok: true });
+    }],
+
     // Read the job's application form and prepare answers, in the background like the pipeline commands.
     ["POST", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/form$/, async (req, res, p) => {
       const { url } = (await readBody(req)) as { url?: string };
@@ -209,7 +221,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     // The Preferences page: the search filters in effect, what the scorer reads about you, and saved form answers.
     ["GET", /^\/api\/preferences$/, (_req, res) => {
       json(res, 200, {
-        search: { profile: cfg.profile, locations: cfg.locations, titleInclude: cfg.titleInclude, titleExclude: cfg.titleExclude, companyExclude: cfg.companyExclude, vet: { applyAt: cfg.vet.applyAt, maybeAt: cfg.vet.maybeAt } },
+        search: { profile: cfg.profile, locations: cfg.locations, titleInclude: cfg.titleInclude, titleExclude: cfg.titleExclude, companyExclude: cfg.companyExclude, followUpDays: cfg.followUpDays, vet: { applyAt: cfg.vet.applyAt, maybeAt: cfg.vet.maybeAt } },
         prefs: loadPreferences(),
         answers: loadAnswers(),
         answerTopics: STANDARD,
