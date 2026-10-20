@@ -1,5 +1,5 @@
 // The candidate as the vetter sees it: CV facts with stable bullet IDs, plus stated preferences.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
 import { Cv } from "../cv/schema.ts";
 
@@ -22,7 +22,11 @@ export interface Candidate {
   text: string;
 }
 
-export function loadCandidate(cvPath = "data/private/cv-master.json", prefsPath = "data/private/preferences.json"): Candidate {
+export const PREFS_PATH = "data/private/preferences.json";
+
+export const loadPreferences = (path = PREFS_PATH): Preferences | null => (existsSync(path) ? Preferences.parse(JSON.parse(readFileSync(path, "utf8"))) : null);
+
+export function loadCandidate(cvPath = "data/private/cv-master.json", prefsPath = PREFS_PATH): Candidate {
   const cv = Cv.parse(JSON.parse(readFileSync(cvPath, "utf8")));
   const prefs = Preferences.parse(JSON.parse(readFileSync(prefsPath, "utf8")));
   const plain = (s: string) => s.replace(/\*\*/g, "");

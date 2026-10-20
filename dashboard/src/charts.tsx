@@ -35,27 +35,3 @@ export function ScoreBreakdown({ factors, total }: { factors: Factor[]; total: n
     </div>
   );
 }
-
-const STEP = ["bg-neutral-bar", "bg-step-1", "bg-step-2", "bg-step-3"] as const;
-
-/** Outcome funnel. Ordinal stages step light to dark on one validated ramp; rejections sit in neutral gray. */
-export function Funnel({ stages }: { stages: { label: string; n: number; tone: 1 | 2 | 3 | 0 }[] }) {
-  const max = Math.max(...stages.map((s) => s.n), 1);
-  return (
-    <table className="w-full border-collapse">
-      <tbody>
-        {stages.map((s) => (
-          <tr key={s.label} title={`${s.label}: ${s.n}`}>
-            <td className="w-px whitespace-nowrap py-1 pr-3 text-ink-2">{s.label}</td>
-            <td className="py-1">
-              <div className="relative h-3.5" role="img" aria-label={`${s.n} jobs`}>
-                <div className={`absolute inset-y-0 left-0 rounded-r ${STEP[s.tone]}`} style={{ width: `${(s.n / max) * 100}%`, minWidth: s.n > 0 ? 4 : 0 }} />
-              </div>
-            </td>
-            <td className="w-px whitespace-nowrap py-1 pl-2.5 text-right tabular-nums">{s.n}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}

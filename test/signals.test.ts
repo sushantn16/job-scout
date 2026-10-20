@@ -30,6 +30,9 @@ test("German: country and market mentions are not language requirements", () => 
     "positioning to resonate with enterprise decision-makers in the German market",
     // Statista, falsely rejected in run 1: "level" belongs to "Junior-level", not to German.
     "Some of the benefits listed here apply only to the German entity and to Junior-level roles or above.",
+    // Talon.One, falsely rejected on 2026-10-19: German lessons are a benefit.
+    "€1,000 annual learning budget and free German language courses to boost your skills",
+    "Free German lessons and a relocation package.",
   ]) assert.equal(germanRequirement(s).value, "none", s);
 });
 

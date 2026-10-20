@@ -9,7 +9,9 @@ const cfg = loadConfig();
 const store = new Store();
 let changed = 0;
 // Freshness is judged against the window of the run that first saw the job, not against today.
-for (const { id, firstRun, posting } of store.postings(["new", "filtered", "stale"])) {
+for (const { id, firstRun, manual, posting } of store.postings(["new", "filtered", "stale"])) {
+  // A job you added by hand stays queued whatever the rules say: you chose it.
+  if (manual) continue;
   const s = screen(posting, cfg);
   const fresh = isFresh(posting.posted, store.runSince(firstRun));
   const before = store.find(posting.company, posting.title).find((j) => j.id === id)?.status;

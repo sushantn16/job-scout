@@ -32,6 +32,8 @@ export interface JobRow {
   title: string;
   status: Status;
   source: string;
+  /** 1 for a job you added by hand. */
+  manual: number;
   url: string;
   posted: string;
   applicants: string;
@@ -108,13 +110,27 @@ export async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** A failed write, with the HTTP status and the server's JSON body for callers that act on more than the message. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: Record<string, unknown>;
+  constructor(message: string, status: number, body: Record<string, unknown>) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /** Writes always send JSON: the server rejects anything else, which keeps other sites from posting to localhost. */
 export async function post<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? String(res.status));
+  if (!res.ok) throw new ApiError(data.error ?? String(res.status), res.status, data as Record<string, unknown>);
   return data;
 }
+
+/** The answer to adding a job by hand (POST /api/jobs). */
+export interface Added { id: string; isNew: boolean; status: Status; scoring: boolean; rejections: string[] }
 
 /** Fetch now and every `ms`; keeps the last good value while refetching, so the view never flashes. */
 export function usePoll<T>(path: string | null, ms: number): { data: T | null; error: string | null; refresh: () => void } {

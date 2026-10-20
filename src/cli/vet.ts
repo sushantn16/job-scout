@@ -1,4 +1,5 @@
 // Run the LLM stages over the queue without fetching. Recorded as a `vet` run so the freshness window is unaffected.
+// `pnpm vet <id>…` scores only those queued jobs (the dashboard does this for a job you add by hand).
 import { ensureAwsSession } from "../aws/session.ts";
 import { loadConfig } from "../config.ts";
 import { Store } from "../db/store.ts";
@@ -16,7 +17,7 @@ if (!aws.ok) {
   process.exit(1);
 }
 try {
-  const { stats, jobs } = await processQueue(store, cfg, runId, loadCandidate());
+  const { stats, jobs } = await processQueue(store, cfg, runId, loadCandidate(), process.argv.slice(2).length ? process.argv.slice(2) : undefined);
   store.finishRun(runId, "done", stats);
   console.log(`Run ${runId}: ${JSON.stringify(stats)}`);
   printVetDigest(jobs);

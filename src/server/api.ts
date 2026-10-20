@@ -1,17 +1,22 @@
 // Read-mostly JSON API over the SQLite store for the dashboard. Writes are limited to job status changes, saved form
-// answers, and starting pipeline commands.
+// answers, jobs you add by hand, and starting pipeline commands.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Config } from "../config.ts";
+import { loadConfig, Search, SEARCH_PATH, type Config } from "../config.ts";
+import { writeJson } from "../files.ts";
+import { loadPreferences, Preferences, PREFS_PATH } from "../vet/candidate.ts";
 import type { JobStatus, Store } from "../db/store.ts";
 import { outputRoot, resolveOutput } from "../tailor/output.ts";
 import { runPipeline } from "./pipeline.ts";
 import { nextStatus, type EmailKind } from "../inbox/classify.ts";
 import { windowStart } from "../filter/freshness.ts";
-import { loadAnswers, saveAnswer, STANDARD, STANDARD_KEYS, type StandardKey } from "../forms/answers.ts";
+import { ANSWERS_PATH, loadAnswers, saveAnswer, STANDARD, STANDARD_KEYS, type StandardKey } from "../forms/answers.ts";
 import type { FormStage } from "../pipeline/form.ts";
+import { screen } from "../filter/rules.ts";
+import { boardOf, fromBoard, pasted } from "../sources/manual.ts";
+import type { Posting } from "../sources/types.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>, query: URLSearchParams) => Promise<void> | void;
 
@@ -20,11 +25,11 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
-const readBody = async (req: IncomingMessage): Promise<unknown> => {
+const readBody = async (req: IncomingMessage, max = 10_000): Promise<unknown> => {
   let raw = "";
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 10_000) throw new Error("body too large");
+    if (raw.length > max) throw new Error("body too large");
   }
   return raw ? JSON.parse(raw) : {};
 };
@@ -47,7 +52,9 @@ function withSaved(form: FormStage | null, saved: Record<string, string>): FormS
 
 /** Statuses a person may set from the dashboard. "apply" approves a job held for review; "new" re-queues it for vetting. */
 const SETTABLE: JobStatus[] = ["apply", "new", "applied", "interview", "rejected", "dismissed"];
-const ACTIONS = ["scan", "vet", "tailor", "inbox"] as const;
+const ACTIONS = ["scan", "vet", "tailor", "inbox", "rescreen"] as const;
+
+const problems = (e: { issues: { path: PropertyKey[]; message: string }[] }) => e.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; ");
 
 export function routes(store: Store, cfg: Config, repoDir: string): [string, RegExp, Handler][] {
   const db = store.db;
@@ -57,6 +64,14 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       const p = price(r.model);
       return sum + (r.input * p.input + r.output * p.output + r.cacheRead * p.cacheRead + r.cacheWrite * p.cacheWrite) / 1e6;
     }, 0);
+  // Pipeline commands run detached, one at a time; a "running" row older than two hours is taken to be a crashed run.
+  const busy = () => Boolean(db.prepare("SELECT id FROM runs WHERE status = 'running' AND started_at > ?").get(new Date(Date.now() - 2 * 3_600_000).toISOString()));
+  const launch = (args: string[]) => {
+    // Runs started here notify when they finish (or need an AWS login), since you may not be watching the page.
+    const child = spawn("pnpm", ["-s", ...args], { cwd: repoDir, detached: true, stdio: "ignore", env: { ...process.env, JOB_SCOUT_NOTIFY: "1" } });
+    child.unref();
+    return child.pid;
+  };
   const usageSql = `SELECT model, sum(input_tokens) AS input, sum(output_tokens) AS output, sum(cache_read_tokens) AS cacheRead,
     sum(cache_write_tokens) AS cacheWrite FROM llm_calls`;
 
@@ -87,7 +102,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     ["GET", /^\/api\/jobs$/, (_req, res, _p, q) => {
       const status = q.get("status");
       const rows = db.prepare(
-        `SELECT id, company, title, status, source, url, posted, applicants, location, first_seen,
+        `SELECT id, company, title, status, source, manual, url, posted, applicants, location, first_seen,
            json_extract(signals, '$.bandTopEur') AS bandTopEur, json_extract(signals, '$.workplace.value') AS workplace,
            json_extract(vet, '$.fitScore') AS score, json_extract(vet, '$.decision') AS decision, json_extract(vet, '$.summary') AS summary,
            json_extract(screen, '$.needsReview') AS flagged, json_array_length(json_extract(screen, '$.findings')) AS findings,
@@ -119,6 +134,38 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
         answerTopics: STANDARD,
         cost: cost(db.prepare(`${usageSql} WHERE job_id = ? GROUP BY model`).all(p.id!) as never),
       });
+    }],
+
+    // Add a job by hand. A board link is read through the board's API; any other link needs company, title and text.
+    ["POST", /^\/api\/jobs$/, async (req, res) => {
+      const body = (await readBody(req, 200_000)) as Record<string, unknown>;
+      const field = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
+      const url = field("url");
+      if (!/^https?:\/\/\S+$/.test(url)) return json(res, 400, { error: "The link must start with http:// or https://" });
+      let p: Posting | null = null;
+      let boardError = "";
+      try {
+        p = await fromBoard(url);
+      } catch (e) {
+        boardError = ` (the board didn't answer: ${(e as Error).message})`;
+      }
+      if (!p) {
+        const d = { url, company: field("company"), title: field("title"), location: field("location"), description: field("description") };
+        if (!d.company || !d.title || d.description.length < 100) {
+          const why = boardOf(url) ? `That board doesn't list this job${boardError || " any more"}.` : "This isn't an Ashby, Greenhouse, Lever or Personio link.";
+          return json(res, 422, { needsDetails: true, error: `${why} Paste the company, the title and the full posting text.` });
+        }
+        p = pasted(d);
+      }
+      let runId = store.latestRunId();
+      if (!runId) store.finishRun((runId = store.startRun(new Date(), "vet")), "done", {});
+      const s = screen(p, cfg);
+      const added = store.addByHand(runId, s);
+      const note = s.rejections.length ? ` (a scan would have filtered it: ${s.rejections[0]})` : "";
+      store.event(runId, "dashboard", `${added.isNew ? "added by hand" : "added again by hand"}: ${p.company}, ${p.title}${note}`, "info", added.id);
+      const scoring = body.score !== false && added.status === "new" && !busy();
+      if (scoring) launch(["vet", added.id]);
+      json(res, added.isNew ? 201 : 200, { ...added, scoring, rejections: s.rejections });
     }],
 
     ["GET", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/cv$/, (_req, res, p) => {
@@ -159,14 +206,40 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       json(res, 200, { key });
     }],
 
-    ["POST", /^\/api\/actions\/(?<name>scan|vet|tailor|inbox)$/, (_req, res, p) => {
-      const running = db.prepare("SELECT id FROM runs WHERE status = 'running' AND started_at > ?").get(new Date(Date.now() - 2 * 3_600_000).toISOString());
-      if (running) return json(res, 409, { error: "a run is already in progress" });
+    // The Preferences page: the search filters in effect, what the scorer reads about you, and saved form answers.
+    ["GET", /^\/api\/preferences$/, (_req, res) => {
+      json(res, 200, {
+        search: { profile: cfg.profile, locations: cfg.locations, titleInclude: cfg.titleInclude, titleExclude: cfg.titleExclude, companyExclude: cfg.companyExclude, vet: { applyAt: cfg.vet.applyAt, maybeAt: cfg.vet.maybeAt } },
+        prefs: loadPreferences(),
+        answers: loadAnswers(),
+        answerTopics: STANDARD,
+        linkedinLocation: cfg.linkedin.location,
+      });
+    }],
+
+    // Save all three at once. Every later run reads them; this server picks up the new filters straight away.
+    ["POST", /^\/api\/preferences$/, async (req, res) => {
+      const body = (await readBody(req, 100_000)) as { search?: unknown; prefs?: unknown; answers?: unknown };
+      const search = Search.required().safeParse(body.search);
+      if (!search.success) return json(res, 400, { error: `Search filters: ${problems(search.error)}` });
+      const prefs = Preferences.safeParse(body.prefs);
+      if (!prefs.success) return json(res, 400, { error: `What you want: ${problems(prefs.error)}` });
+      const answers = Object.entries((body.answers ?? {}) as Record<string, unknown>);
+      const bad = answers.find(([k, v]) => !STANDARD_KEYS.includes(k as StandardKey) || typeof v !== "string" || v.length > 2000);
+      if (bad) return json(res, 400, { error: `Form answers: "${bad[0]}" must be a known topic with text under 2,000 characters` });
+      writeJson(SEARCH_PATH, search.data);
+      writeJson(PREFS_PATH, prefs.data);
+      writeJson(ANSWERS_PATH, Object.fromEntries(answers.map(([k, v]) => [k, (v as string).trim()]).filter(([, v]) => v)));
+      // Handlers share this config object, so updating it in place applies the new filters to every route.
+      Object.assign(cfg, loadConfig());
+      store.event(store.latestRunId(), "dashboard", "saved preferences");
+      json(res, 200, { ok: true });
+    }],
+
+    ["POST", /^\/api\/actions\/(?<name>scan|vet|tailor|inbox|rescreen)$/, (_req, res, p) => {
+      if (busy()) return json(res, 409, { error: "a run is already in progress" });
       const name = p.name as (typeof ACTIONS)[number];
-      // Runs started here notify when they finish (or need an AWS login), since you may not be watching the page.
-      const child = spawn("pnpm", ["-s", name], { cwd: repoDir, detached: true, stdio: "ignore", env: { ...process.env, JOB_SCOUT_NOTIFY: "1" } });
-      child.unref();
-      json(res, 202, { started: name, pid: child.pid });
+      json(res, 202, { started: name, pid: launch([name]) });
     }],
 
     ["GET", /^\/api\/pipeline(?:\/(?<id>\d+))?$/, (_req, res, p) => {

@@ -30,8 +30,9 @@ export interface Processed {
   error?: string;
 }
 
-export async function processQueue(store: Store, cfg: Config, runId: number, candidate: Candidate): Promise<{ stats: ProcessStats; jobs: Processed[] }> {
-  const queue = store.queue(cfg.caps.vetPerRun);
+/** `ids` limits the run to those queued jobs (a job you just added), instead of the best of the whole queue. */
+export async function processQueue(store: Store, cfg: Config, runId: number, candidate: Candidate, ids?: string[]): Promise<{ stats: ProcessStats; jobs: Processed[] }> {
+  const queue = store.queue(cfg.caps.vetPerRun, ids);
   store.event(runId, "vet", `${queue.length} job(s) queued for screening and vetting`);
   // One research call per company per run, even when several of its jobs are in flight at once.
   const inflight = new Map<string, Promise<CompanyProfile | null>>();
@@ -42,7 +43,7 @@ export async function processQueue(store: Store, cfg: Config, runId: number, can
     if (cached) return Promise.resolve(cached);
     if (!inflight.has(key)) {
       const name = cfg.companyNames[p.company] ?? p.company;
-      inflight.set(key, researchCompany({ name, slug: p.source === "linkedin" || p.source === "hn" ? undefined : p.company, postingText: description, postingUrl: p.url }, record)
+      inflight.set(key, researchCompany({ name, slug: ["linkedin", "hn", "manual"].includes(p.source) ? undefined : p.company, postingText: description, postingUrl: p.url }, record)
         .then((profile) => (store.saveCompany(key, name, profile), profile))
         .catch((e: Error) => (store.event(runId, "research", `${name}: ${e.message}`, "warn"), null)));
     }

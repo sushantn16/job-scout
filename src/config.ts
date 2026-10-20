@@ -51,4 +51,24 @@ export type Config = z.infer<typeof Config>;
 /** Your own settings in the git-ignored config/job-scout.local.json win over the example in config/job-scout.json. */
 const defaultPath = () => (existsSync("config/job-scout.local.json") ? "config/job-scout.local.json" : "config/job-scout.json");
 
-export const loadConfig = (path = defaultPath()): Config => Config.parse(JSON.parse(readFileSync(path, "utf8")));
+/**
+ * The search filters you edit on the dashboard's Preferences page. They live in the data volume, so they survive an
+ * image rebuild (config/ is baked into the image), and they win over the config file.
+ */
+export const SEARCH_PATH = "data/private/search.json";
+export const Search = z.object({
+  profile: Config.shape.profile,
+  locations: Config.shape.locations,
+  titleInclude: Pattern,
+  titleExclude: Pattern,
+  companyExclude: Pattern,
+  vet: z.object({ applyAt: z.number(), maybeAt: z.number() }).refine((v) => v.applyAt > v.maybeAt, "the apply line must be above the maybe line"),
+}).partial();
+export type Search = z.infer<typeof Search>;
+
+/** `searchPath` null ignores saved search filters (tests use the example config as it is). */
+export function loadConfig(path = defaultPath(), searchPath: string | null = SEARCH_PATH): Config {
+  const base = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown> & { vet?: object };
+  const search = searchPath && existsSync(searchPath) ? Search.parse(JSON.parse(readFileSync(searchPath, "utf8"))) : {};
+  return Config.parse({ ...base, ...search, vet: { ...base.vet, ...search.vet } });
+}

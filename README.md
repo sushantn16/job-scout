@@ -77,12 +77,19 @@ can use tools.
 Per run, at most 15 jobs are scored and 5 tailored (`caps` in the config). Every Claude call is logged with its tokens
 and the model that served it. The dashboard shows the cost over the last 30 days.
 
-**The dashboard** runs on http://127.0.0.1:8765 and has five tabs:
-- **Board:** jobs by status.
-- **Pipeline:** a live diagram of the run, with counts, durations and cost per stage.
+**The dashboard** runs on http://127.0.0.1:8765 and has five views:
+- **Board:** a column per stage (ready to apply, maybe, applied, interview, rejected). Drag a card to the next stage,
+  or onto the bar that appears while dragging to dismiss it. Each job's page has the same moves as buttons, and tabs
+  for the application (CV, texts, form answers), the fit score, the company and the posting.
+- **All jobs:** every job, filtered by status or searched by name, with the reason each ended where it did.
 - **Inbox:** replies and status changes.
-- **All jobs.**
-- **Runs:** each run with its event log.
+- **Pipeline:** a live diagram of the run, with counts, durations and cost per stage, the event log and run history.
+- **Preferences:** where you'd work (add a city you'd relocate to), hard rules, role titles, what the scorer should
+  know about you, and your saved form answers.
+
+**Add job** takes a job the scan didn't find. An Ashby, Greenhouse, Lever or Personio link is read from the board;
+for any other link (LinkedIn, a careers page) you paste the company, title and posting text. It's scored straight
+away, and queued even if a hard rule would have filtered it, since you chose it.
 
 It only listens on localhost, and it only accepts changes sent from its own page.
 
@@ -167,6 +174,10 @@ Edit the local copy; it's git-ignored and used instead of the example when it ex
 
 The config is validated at startup, so a typo fails loudly.
 
+The dashboard's **Preferences** page edits `profile`, `locations`, the title and company patterns, and the score
+thresholds. It saves them to `data/private/search.json`, which wins over the config file and lives in the data
+volume, so a rebuild keeps them. Everything else (sources, weights, LinkedIn search) stays in the config file.
+
 ### 5a. Run with Docker (recommended)
 
 Everything runs in one container:
@@ -241,9 +252,9 @@ A LinkedIn source isn't included, because automated access is against LinkedIn's
 | Command | What it does |
 |---|---|
 | `pnpm scan` | The whole pipeline: fetch, filter, screen, research, score, tailor, form answers, inbox |
-| `pnpm vet` | Screen, research and score jobs already queued, without fetching |
+| `pnpm vet [job-id…]` | Screen, research and score jobs already queued (or only those), without fetching |
 | `pnpm tailor` | Tailor "apply" jobs only |
-| `pnpm rescreen` | Re-apply the filter rules to queued jobs after editing the config |
+| `pnpm rescreen` | Re-apply the filter rules to queued, filtered and older jobs after editing them (skips jobs you added) |
 | `pnpm mark <company> "<title words>" <status>` | Set a job's status by hand |
 | `pnpm form <job-id> [form-url]` | Read a job's application form and prepare answers |
 | `pnpm inbox` | Read Gmail replies |

@@ -111,7 +111,8 @@ export class Store {
     if (!cols.some((c) => c.name === "kind")) this.db.exec("ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'scan'");
     const jobCols = new Set((this.db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
     // Columns added after the first schema; each stage stores its full JSON result for the dashboard.
-    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"]] as const)
+    // `manual` marks a job you added by hand, which re-screening must leave queued.
+    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"], ["manual", "INTEGER NOT NULL DEFAULT 0"]] as const)
       if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
     const callCols = new Set((this.db.prepare("PRAGMA table_info(llm_calls)").all() as { name: string }[]).map((c) => c.name));
     for (const col of ["cache_read_tokens", "cache_write_tokens"])
@@ -183,12 +184,26 @@ export class Store {
     return { id, isNew: true };
   }
 
+  /**
+   * A job you added by hand: stored like a scanned one, then queued for scoring even if a hard rule rejects it, since
+   * you chose it. A job seen before but never scored (filtered, or older than the window) is queued again; any other
+   * known job is left where it is.
+   */
+  addByHand(runId: number, s: Screened): { id: string; isNew: boolean; status: JobStatus } {
+    const { id, isNew } = this.upsert(runId, s, true);
+    const { status } = this.db.prepare("SELECT status FROM jobs WHERE id = ?").get(id) as { status: JobStatus };
+    if (!isNew && status !== "filtered" && status !== "stale") return { id, isNew, status };
+    this.db.prepare("UPDATE jobs SET status = 'new', manual = 1 WHERE id = ?").run(id);
+    return { id, isNew, status: "new" };
+  }
+
   /** Stored postings in the given statuses, for re-screening after a rule or config change. */
-  postings(statuses: JobStatus[]): { id: string; firstRun: number; posting: Posting }[] {
+  postings(statuses: JobStatus[]): { id: string; firstRun: number; manual: boolean; posting: Posting }[] {
     const rows = this.db.prepare(`SELECT * FROM jobs WHERE status IN (${statuses.map(() => "?").join(",")})`).all(...statuses);
-    return (rows as unknown as (Omit<Posting, "hiddenText"> & { id: string; first_run: number; hidden: string })[]).map(({ id, first_run, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }) => ({
+    return (rows as unknown as (Omit<Posting, "hiddenText"> & { id: string; first_run: number; manual: number; hidden: string })[]).map(({ id, first_run, manual, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }) => ({
       id,
       firstRun: first_run,
+      manual: manual === 1,
       posting: { source, company, title, location, url, description, comp, workplace, applicants, posted, hiddenText: JSON.parse(hidden) as string[] },
     }));
   }
@@ -250,13 +265,14 @@ export class Store {
     this.db.prepare("UPDATE jobs SET company_key = ? WHERE id = ?").run(key, id);
   }
 
-  /** Jobs waiting for the LLM stages, best first: highest posted band, then fewest applicants, then newest. */
-  queue(limit: number): { id: string; posting: Posting }[] {
+  /** Jobs waiting for the LLM stages, best first: highest posted band, then fewest applicants, then newest. `only` limits it to those IDs. */
+  queue(limit: number, only?: string[]): { id: string; posting: Posting }[] {
+    const where = only?.length ? `AND id IN (${only.map(() => "?").join(",")})` : "";
     const rows = this.db.prepare(
-      `SELECT id FROM jobs WHERE status = 'new'
+      `SELECT id FROM jobs WHERE status = 'new' ${where}
        ORDER BY coalesce(json_extract(signals, '$.bandTopEur'), 0) DESC, coalesce(json_extract(signals, '$.applicants'), 100) ASC, posted DESC
        LIMIT ?`,
-    ).all(limit) as { id: string }[];
+    ).all(...(only ?? []), limit) as { id: string }[];
     const ids = new Set(rows.map((r) => r.id));
     const all = this.postings(["new"]).filter((p) => ids.has(p.id));
     return rows.map((r) => all.find((p) => p.id === r.id)!).map(({ id, posting }) => ({ id, posting }));
