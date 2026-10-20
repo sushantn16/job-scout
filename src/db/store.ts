@@ -231,6 +231,11 @@ export class Store {
     return row ? toJob(row).posting : null;
   }
 
+  /** Refresh what the rules read from a job's text, without touching its status. */
+  updateSignals(id: string, s: Screened): void {
+    this.db.prepare("UPDATE jobs SET signals = ? WHERE id = ?").run(JSON.stringify(s.signals), id);
+  }
+
   updateScreen(id: string, s: Screened, fresh: boolean): void {
     this.db.prepare("UPDATE jobs SET status = ?, signals = ?, rejections = ? WHERE id = ?")
       .run(statusFor(s, fresh), JSON.stringify(s.signals), JSON.stringify(s.rejections), id);

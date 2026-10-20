@@ -110,7 +110,8 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
            json_extract(signals, '$.bandTopEur') AS bandTopEur, json_extract(signals, '$.workplace.value') AS workplace,
            json_extract(vet, '$.fitScore') AS score, json_extract(vet, '$.decision') AS decision, json_extract(vet, '$.summary') AS summary,
            json_extract(screen, '$.needsReview') AS flagged, json_array_length(json_extract(screen, '$.findings')) AS findings,
-           json_extract(rejections, '$[0]') AS rejection
+           json_extract(rejections, '$[0]') AS rejection,
+           coalesce(json_extract(vet, '$.recruiter.kind'), CASE WHEN json_extract(signals, '$.recruiter.value') THEN 'recruiter' END) AS recruiter
          FROM jobs ${status === "all" ? "" : "WHERE status NOT IN ('filtered', 'stale')"}
          ORDER BY coalesce(json_extract(vet, '$.fitScore'), -1) DESC, posted DESC LIMIT 1000`,
       ).all() as { company: string }[];

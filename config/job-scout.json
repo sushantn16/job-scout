@@ -3,7 +3,8 @@
   "profile": {
     "maxYearsRequired": 6,
     "minBandTopEur": 80000,
-    "germanBlocksAt": "required"
+    "germanBlocksAt": "required",
+    "recruiters": "flag"
   },
   "followUpDays": 10,
   "caps": {

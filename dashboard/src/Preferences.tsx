@@ -7,7 +7,7 @@ import { Banner, Button, Card, cx, H3 } from "./ui";
 
 interface Prefs { targetRoles: string[]; languages: string; location: string; compensation: string; culture: string[]; experience: string; knownGaps: string[]; aiFocus: string }
 interface SearchSettings {
-  profile: { maxYearsRequired: number; minBandTopEur: number; germanBlocksAt: "required" | "plus" };
+  profile: { maxYearsRequired: number; minBandTopEur: number; germanBlocksAt: "required" | "plus"; recruiters: "flag" | "skip" };
   locations: Record<string, string>;
   titleInclude: string;
   titleExclude: string;
@@ -167,6 +167,14 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
             <select className={input} value={search.profile.germanBlocksAt} onChange={(e) => setProfile({ germanBlocksAt: e.target.value as "required" | "plus" })}>
               <option value="required">required</option>
               <option value="plus">required or a plus</option>
+            </select>
+          </Field>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <Field label="Recruiter postings and reposts" hint="A recruiter writing for a client, or a job board reposting another company's job">
+            <select className={input} value={search.profile.recruiters} onChange={(e) => setProfile({ recruiters: e.target.value as SearchSettings["profile"]["recruiters"] })}>
+              <option value="flag">Score them, with a badge</option>
+              <option value="skip">Skip them</option>
             </select>
           </Field>
         </div>

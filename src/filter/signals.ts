@@ -30,6 +30,16 @@ export function isGermanText(text: string): boolean {
   return de > 15 && de > en;
 }
 
+// A recruiter writing for a client says so, with the client as the subject ("our client is building"). Employers'
+// own "our recruiter", "recruitment scams" and their customers ("our client’s time-to-market", Upvest) don't match.
+const RECRUITER = /\b(?:our|my) client (?:is|are|was|has|have|offers|builds|operates|develops|provides|seeks|needs|wants|works|helps|enables|creates|makes)\b|\bon behalf of (?:our|a|an|one of our) (?:client|partner)\b|\bwe(?:['’]re| are) (?:partnering|working) with an? \b[^.]{0,80}?\b(?:company|startup|scale-?up|business|organi[sz]ation|client|firm)\b/i;
+
+/** Whether the posting says it's written by a recruiter for a client, with the sentence that says so. */
+export function recruiterPosting(text: string): Evidence<boolean> {
+  const s = sentences(text).find((x) => RECRUITER.test(x));
+  return s ? { value: true, evidence: s } : { value: false, evidence: "" };
+}
+
 export type GermanLevel = "required" | "plus" | "none";
 
 export function germanRequirement(text: string): Evidence<GermanLevel> {

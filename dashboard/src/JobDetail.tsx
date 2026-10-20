@@ -81,6 +81,7 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
   const v = job.vet;
   const s = job.signals;
   const c = job.companyProfile;
+  const recruiter = v?.recruiter ?? (s?.recruiter?.value ? { kind: "recruiter" as const, evidence: s.recruiter.evidence } : null);
 
   // The tab that fits where the job is: applying once there's something to apply with, else why it scored as it did.
   const tabs: { id: Tab; label: string }[] = [
@@ -248,6 +249,9 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
                 ...(job.followed_up_at ? ([["Followed up", job.followed_up_at.slice(0, 10)]] as [string, ReactNode][]) : []),
                 ...(job.replied_at && job.applied_at
                   ? ([["Reply", `after ${Math.round(((Date.parse(job.replied_at) - Date.parse(job.applied_at)) / 86_400_000) * 10) / 10} d`]] as [string, ReactNode][])
+                  : []),
+                ...(recruiter
+                  ? ([["Posted by", `${recruiter.kind === "reposted" ? "a job board reposting it" : "a recruiter"}${recruiter.evidence ? `: “${recruiter.evidence}”` : ""}`]] as [string, ReactNode][])
                   : []),
                 ["Source", job.manual ? (job.source === "manual" ? "added by you" : `added by you (${job.source})`) : job.source],
                 ["LLM cost", usd(job.cost)],

@@ -10,6 +10,8 @@ export const Config = z.object({
     maxYearsRequired: z.number().int(),
     minBandTopEur: z.number(),
     germanBlocksAt: z.enum(["required", "plus"]),
+    /** Postings by a recruiter for a client, or reposted by a job board: score them with a badge, or skip them. */
+    recruiters: z.enum(["flag", "skip"]).default("flag"),
   }),
   caps: z.object({ vetPerRun: z.number().int(), tailorPerRun: z.number().int() }),
   /** Days without a reply before an application is due a follow-up. */

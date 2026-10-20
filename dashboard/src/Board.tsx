@@ -52,6 +52,7 @@ function JobCard({ job, open, onDrag, followUpDays }: { job: JobRow; open: Open;
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         {job.status === "apply" ? <Pill tone="info">Not tailored yet</Pill> : null}
         {job.manual ? <Pill>Added by you</Pill> : null}
+        {job.recruiter ? <Pill tone="warning">{job.recruiter === "reposted" ? "Reposted" : "Recruiter"}</Pill> : null}
         {job.flagged ? <Pill tone="warning">AI-directed text</Pill> : null}
         {followUpDue(job, followUpDays) ? <Pill tone="warning">Follow up</Pill> : null}
         {meta.map((m) => <span key={m}>{m}</span>)}

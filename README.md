@@ -169,6 +169,8 @@ Edit the local copy; it's git-ignored and used instead of the example when it ex
   - `maxYearsRequired`: the most years of experience a posting may ask for.
   - `minBandTopEur`: the lowest acceptable top of a published pay band.
   - `germanBlocksAt`: `required` drops postings that require German; `plus` also drops those where it's a plus.
+  - `recruiters`: `flag` (default) scores recruiter postings and job-board reposts with a badge; `skip` drops them.
+    A recruiter is spotted by its own words ("our client is…") or by the scorer.
 - **`vet`:** score thresholds and weights. **`caps`:** jobs scored and tailored per run. **`pricing`:** USD per
   million tokens, per model.
 

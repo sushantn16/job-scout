@@ -54,6 +54,8 @@ export interface JobRow {
   flagged: number | null;
   findings: number | null;
   rejection: string | null;
+  /** Who posted it, when it wasn't the employer: from the posting's words or the scorer's reading. */
+  recruiter: "recruiter" | "reposted" | null;
 }
 
 /** One stage of a run, as /api/pipeline sends it; the stages are defined once, in src/pipeline/stages.ts. */
@@ -76,9 +78,9 @@ export interface Factor { factor: string; weight: number; value: number; points:
 export interface Finding { layer: "pattern" | "llm"; kind: string; quote: string; intent?: string }
 export interface Cited { text: string; sourceUrl: string }
 
-export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary" | "flagged" | "findings" | "rejection"> {
+export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary" | "flagged" | "findings" | "rejection" | "recruiter"> {
   description: string;
-  signals: { german: { value: string; evidence: string }; years: { value: number | null; evidence: string }; band: { evidence: string }; bandTopEur: number | null; workplace: { value: string } } | null;
+  signals: { german: { value: string; evidence: string }; years: { value: number | null; evidence: string }; band: { evidence: string }; bandTopEur: number | null; workplace: { value: string }; recruiter?: { value: boolean; evidence: string } } | null;
   rejections: string[];
   screen: { findings: Finding[]; needsReview: boolean } | null;
   vet: {
@@ -91,6 +93,8 @@ export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary"
     culture: { englishFirst: string; engineeringCulture: string; stageAndFunding: string; notes: string };
     requirements: { mustHave: string[]; niceToHave: string[]; responsibilities: string[]; techStack: string[]; seniority: string; teamContext: string };
     tailoringAngle: string;
+    /** Absent on jobs scored before it existed. */
+    recruiter?: { kind: "recruiter" | "reposted"; by: "posting" | "scorer"; evidence: string } | null;
   } | null;
   tailor: { dir: string; cvFile: string; whyUs?: string; note?: string; emphasis?: string; headline?: string; needsEdit: { where: string; problem: string }[] } | null;
   application: string | null;

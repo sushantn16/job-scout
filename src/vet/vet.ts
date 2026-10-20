@@ -41,6 +41,10 @@ export const VetOutput = z.object({
     teamContext: Short(260),
   }),
   tailoringAngle: Short(400).describe("Under 400 characters: what the CV and application should emphasise for this job"),
+  postedBy: z.object({
+    value: z.enum(["employer", "recruiter", "reposted", "unclear"]),
+    evidence: Short(160).describe("The posting's words that show who posted it; empty for employer or unclear"),
+  }),
 });
 export type VetOutput = z.infer<typeof VetOutput>;
 
@@ -53,6 +57,7 @@ const LIMITS: Spec = {
   culture: { notes: 300 },
   requirements: { mustHave: [8, 160], niceToHave: [6, 160], responsibilities: [6, 160], techStack: [14, 40], seniority: 80, teamContext: 260 },
   tailoringAngle: 400,
+  postedBy: { evidence: 160 },
 };
 
 export type Decision = "apply" | "maybe" | "skip";
@@ -62,6 +67,8 @@ export interface VetResult extends VetOutput {
   factors: Factor[];
   decision: Decision;
   droppedBulletIds: string[];
+  /** Set when the posting is a recruiter's or a repost, from its own words (`posting`) or the scorer's reading (`scorer`). */
+  recruiter: { kind: "recruiter" | "reposted"; by: "posting" | "scorer"; evidence: string } | null;
 }
 
 const SYSTEM = (candidate: Candidate) => `You assess whether a job is worth this candidate's application. Be honest and
@@ -82,6 +89,10 @@ factor on its own merits.
 - Gaps: "blocker" only for something that makes applying pointless (for example a required clearance or citizenship,
   a required language, or years of a stack the candidate lacks entirely). "major" for a significant shortfall,
   "minor" for a nice-to-have.
+
+Who posted it: "recruiter" when an agency or recruiter posts for a client (often unnamed: "our client", "we're
+partnering with"), "reposted" when a job board or aggregator reposts another company's job, "employer" when the
+company posts its own job, "unclear" otherwise. This is recorded separately; don't let it change your ratings.
 
 Hard filters (German required, more than 6 years required, pay band too low) have already been applied.
 
@@ -130,6 +141,12 @@ export async function vetJob(
     cvBulletIds: st.cvBulletIds.filter((id) => args.candidate.bulletIds.has(id) || (droppedBulletIds.push(id), false)),
   }));
   const { applyAt, maybeAt } = args.cfg.vet;
-  const decision: Decision = out.gaps.some((g) => g.severity === "blocker") ? "skip" : score >= applyAt ? "apply" : score >= maybeAt ? "maybe" : "skip";
-  return { ...out, strengths, fitScore: score, factors, decision, droppedBulletIds };
+  const recruiter: VetResult["recruiter"] = s.recruiter?.value
+    ? { kind: "recruiter", by: "posting", evidence: s.recruiter.evidence }
+    : out.postedBy.value === "recruiter" || out.postedBy.value === "reposted"
+      ? { kind: out.postedBy.value, by: "scorer", evidence: out.postedBy.evidence }
+      : null;
+  const skipRecruiter = Boolean(recruiter) && args.cfg.profile.recruiters === "skip";
+  const decision: Decision = skipRecruiter || out.gaps.some((g) => g.severity === "blocker") ? "skip" : score >= applyAt ? "apply" : score >= maybeAt ? "maybe" : "skip";
+  return { ...out, strengths, fitScore: score, factors, decision, droppedBulletIds, recruiter };
 }
