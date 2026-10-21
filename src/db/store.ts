@@ -192,9 +192,15 @@ export class Store {
   upsert(runId: number, s: Screened, fresh: boolean): { id: string; isNew: boolean } {
     const p = s.posting;
     const key = dedupeKey(p.company, p.title);
-    // A board posting already known as a LinkedIn job's own posting is that job, even if the titles differ a little.
-    const existing = this.db.prepare("SELECT id FROM jobs WHERE dedupe_key = ? OR board_url = ?").get(key, p.url) as { id: string } | undefined;
+    const id = createHash("sha1").update(`${p.source}|${p.url}`).digest("hex").slice(0, 16);
+    // The same job: the same source and URL (even if the employer has since renamed it), the same company and title
+    // from any source, or the posting already known as a LinkedIn job's own posting. The same URL wins a tie.
+    const existing = this.db.prepare("SELECT id, title FROM jobs WHERE id = ? OR dedupe_key = ? OR board_url = ? ORDER BY id = ? DESC LIMIT 1")
+      .get(id, key, p.url, id) as { id: string; title: string } | undefined;
     if (existing) {
+      // A renamed job takes its new title, unless another stored job already has it.
+      if (existing.id === id && existing.title !== p.title)
+        this.db.prepare("UPDATE jobs SET title = ?, dedupe_key = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM jobs WHERE dedupe_key = ? AND id <> ?)").run(p.title, key, id, key, id);
       // Refresh fields the source may correct, but only from the source the job was stored from: a LinkedIn
       // sighting of an Ashby job must not overwrite Ashby's own dates. Status is decided once, at first sight.
       this.db.prepare(
@@ -206,7 +212,6 @@ export class Store {
       ).run(now(), p.source, p.posted, p.posted, p.source, p.comp, p.comp, p.source, p.applicants, p.applicants, existing.id);
       return { id: existing.id, isNew: false };
     }
-    const id = createHash("sha1").update(`${p.source}|${p.url}`).digest("hex").slice(0, 16);
     const t = now();
     this.db.prepare(
       `INSERT INTO jobs (id, dedupe_key, source, company, title, location, url, description, comp, workplace, applicants, posted, hidden,

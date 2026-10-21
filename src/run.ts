@@ -99,7 +99,15 @@ try {
   for (const p of relevant) {
     const s = screen(p, cfg);
     const recent = isFresh(p.posted, since);
-    const { isNew, id } = store.upsert(runId, s, recent);
+    // One posting that can't be stored must not cost the whole run (run 29 failed on a renamed job).
+    let stored: { isNew: boolean; id: string };
+    try {
+      stored = store.upsert(runId, s, recent);
+    } catch (e) {
+      log("filter", `could not store ${p.company} | ${p.title}: ${(e as Error).message}`, "warn");
+      continue;
+    }
+    const { isNew, id } = stored;
     if (!isNew) continue;
     if (!recent && s.rejections.length === 0) {
       stale++;
