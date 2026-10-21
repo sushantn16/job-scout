@@ -7,6 +7,7 @@ import { loadConfig } from "../src/config.ts";
 import { Store } from "../src/db/store.ts";
 import { screen } from "../src/filter/rules.ts";
 import { pasted } from "../src/sources/manual.ts";
+import { posting } from "../src/sources/types.ts";
 
 test("jobs are read one at a time by id, and the queue comes back best band first", () => {
   const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
@@ -88,6 +89,31 @@ test("application dates: older databases get them from the status changes in the
 
     const store = new Store(path);
     assert.deepEqual({ ...store.db.prepare("SELECT applied_at AS a, replied_at AS r FROM jobs WHERE id = ?").get(id) }, { a: applied, r: rejected });
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a job its employer renamed is the same job, not a new one (run 29 failed on this)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const store = new Store(join(dir, "test.db"));
+    const cfg = loadConfig("config/job-scout.json", null);
+    const runId = store.startRun(new Date(), "scan");
+    const text = "Own product features end to end in TypeScript and React in Berlin. ".repeat(3);
+    const at = (title: string, source: "ashby" | "linkedin" = "ashby", url = "https://jobs.ashbyhq.com/clickhouse/2344ae13") =>
+      screen(posting({ source, company: "clickhouse", title, url, location: "Berlin", description: text }), cfg);
+
+    const { id } = store.upsert(runId, at("Langfuse - Product Engineer, Integrations"), true);
+    assert.deepEqual(store.upsert(runId, at("Langfuse - Senior Product Engineer, Integrations"), true), { id, isNew: false });
+    assert.equal(store.posting(id)?.title, "Langfuse - Senior Product Engineer, Integrations", "it takes the new title");
+
+    // Renamed to a title another stored job already has: still the same job, and the old title stays.
+    const other = store.upsert(runId, at("Langfuse - Staff Product Engineer", "linkedin", "https://www.linkedin.com/jobs/view/9"), true).id;
+    assert.deepEqual(store.upsert(runId, at("Langfuse - Staff Product Engineer"), true), { id, isNew: false });
+    assert.equal(store.posting(id)?.title, "Langfuse - Senior Product Engineer, Integrations");
+    assert.notEqual(other, id);
     store.db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
