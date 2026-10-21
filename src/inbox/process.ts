@@ -24,7 +24,7 @@ export async function processInbox(store: Store, cfg: Config, runId: number): Pr
     store.event(runId, "inbox", "skipped: JOB_SCOUT_IMAP_USER not set (see README)", "warn");
     return null;
   }
-  const jobs: MatchJob[] = store.matchableJobs().map((j) => ({ ...j, companyName: cfg.companyNames[j.company] ?? j.company }));
+  const jobs: MatchJob[] = store.matchableJobs().map((j) => ({ ...j, companyName: store.companyName(j.company, cfg.companyNames) }));
   const names = [...new Set(jobs.filter((j) => ACTIVE.has(j.status)).map((j) => j.companyName))];
   const emails = (await fetchApplicationEmails(user, names)).sort((a, b) => a.date.localeCompare(b.date));
   const stats: InboxStats = { checked: emails.length, new: 0, matched: 0, changed: 0, needsYou: 0, interviews: 0, rejections: 0, confirmations: 0 };

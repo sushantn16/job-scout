@@ -1,4 +1,5 @@
-export type SourceKind = "ashby" | "greenhouse" | "lever" | "personio" | "hn" | "linkedin";
+/** `manual` is a job you added from the dashboard with details you pasted (see src/sources/manual.ts). */
+export type SourceKind = "ashby" | "greenhouse" | "lever" | "personio" | "hn" | "linkedin" | "manual";
 
 /** A job posting normalized across sources. `description` is untrusted text from the posting. */
 export interface Posting {

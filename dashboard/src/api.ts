@@ -22,6 +22,10 @@ export interface Summary {
   running: Run | null;
   pricingNote: string;
   nextWindowStart: string;
+  followUpDays: number;
+  followUpsDue: number;
+  /** Days from applying to the first reply, one entry per application that got one, ascending. */
+  replyDays: number[];
 }
 
 export interface JobRow {
@@ -32,11 +36,16 @@ export interface JobRow {
   title: string;
   status: Status;
   source: string;
+  /** 1 for a job you added by hand. */
+  manual: number;
   url: string;
   posted: string;
   applicants: string;
   location: string;
   first_seen: string;
+  applied_at: string | null;
+  replied_at: string | null;
+  followed_up_at: string | null;
   bandTopEur: number | null;
   workplace: string | null;
   score: number | null;
@@ -45,15 +54,35 @@ export interface JobRow {
   flagged: number | null;
   findings: number | null;
   rejection: string | null;
+  /** Who posted it, when it wasn't the employer: from the posting's words or the scorer's reading. */
+  recruiter: "recruiter" | "reposted" | null;
+}
+
+/** One stage of a run, as /api/pipeline sends it; the stages are defined once, in src/pipeline/stages.ts. */
+export interface PipelineStage {
+  key: string;
+  name: string;
+  kind: "code" | "LLM";
+  does: string;
+  status: "done" | "running" | "waiting" | "skipped" | "idle" | "failed";
+  metrics: string[];
+  /** The metric the diagram shows on the stage's block. */
+  headline: string | null;
+  ms: number | null;
+  cost: number;
+  calls: number;
+  errors: number;
 }
 
 export interface Factor { factor: string; weight: number; value: number; points: number; basis: string }
 export interface Finding { layer: "pattern" | "llm"; kind: string; quote: string; intent?: string }
 export interface Cited { text: string; sourceUrl: string }
 
-export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary" | "flagged" | "findings" | "rejection"> {
+export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary" | "flagged" | "findings" | "rejection" | "recruiter"> {
   description: string;
-  signals: { german: { value: string; evidence: string }; years: { value: number | null; evidence: string }; band: { evidence: string }; bandTopEur: number | null; workplace: { value: string } } | null;
+  /** The job's own posting on its company's board, for a job first seen on LinkedIn or HN. */
+  board_url: string | null;
+  signals: { german: { value: string; evidence: string }; years: { value: number | null; evidence: string }; band: { evidence: string }; bandTopEur: number | null; workplace: { value: string }; recruiter?: { value: boolean; evidence: string } } | null;
   rejections: string[];
   screen: { findings: Finding[]; needsReview: boolean } | null;
   vet: {
@@ -66,6 +95,8 @@ export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary"
     culture: { englishFirst: string; engineeringCulture: string; stageAndFunding: string; notes: string };
     requirements: { mustHave: string[]; niceToHave: string[]; responsibilities: string[]; techStack: string[]; seniority: string; teamContext: string };
     tailoringAngle: string;
+    /** Absent on jobs scored before it existed. */
+    recruiter?: { kind: "recruiter" | "reposted"; by: "posting" | "scorer"; evidence: string } | null;
   } | null;
   tailor: { dir: string; cvFile: string; whyUs?: string; note?: string; emphasis?: string; headline?: string; needsEdit: { where: string; problem: string }[] } | null;
   application: string | null;
@@ -108,13 +139,27 @@ export async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** A failed write, with the HTTP status and the server's JSON body for callers that act on more than the message. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: Record<string, unknown>;
+  constructor(message: string, status: number, body: Record<string, unknown>) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /** Writes always send JSON: the server rejects anything else, which keeps other sites from posting to localhost. */
 export async function post<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? String(res.status));
+  if (!res.ok) throw new ApiError(data.error ?? String(res.status), res.status, data as Record<string, unknown>);
   return data;
 }
+
+/** The answer to adding a job by hand (POST /api/jobs). */
+export interface Added { id: string; isNew: boolean; status: Status; scoring: boolean; rejections: string[] }
 
 /** Fetch now and every `ms`; keeps the last good value while refetching, so the view never flashes. */
 export function usePoll<T>(path: string | null, ms: number): { data: T | null; error: string | null; refresh: () => void } {
@@ -133,6 +178,12 @@ export function usePoll<T>(path: string | null, ms: number): { data: T | null; e
   }, [load, ms]);
   return { data, error, refresh: load };
 }
+
+/** Whether an application has waited `days` without a reply since it was sent or last followed up. */
+export const followUpDue = (j: Pick<JobRow, "status" | "applied_at" | "followed_up_at">, days: number) => {
+  const since = j.followed_up_at ?? j.applied_at;
+  return j.status === "applied" && since !== null && Date.now() - Date.parse(since) >= days * 86_400_000;
+};
 
 export const euro = (n: number | null) => (n == null ? "–" : `€${Math.round(n / 1000)}K`);
 export const usd = (n: number) => (n < 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(n < 10 ? 2 : 0)}`);

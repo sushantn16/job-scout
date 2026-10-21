@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Screened } from "../filter/rules.ts";
+import type { EventStage } from "../pipeline/stages.ts";
+import type { AtsKind } from "../sources/ats.ts";
 import type { Posting } from "../sources/types.ts";
 
 // Job lifecycle. M1 writes `new`, `filtered` and `stale`; later stages are claimed by the LLM workers.
@@ -72,6 +74,14 @@ CREATE TABLE IF NOT EXISTS emails (
   run_id INTEGER,
   processed_at TEXT NOT NULL
 );
+-- Company job boards found from LinkedIn/HN jobs (src/pipeline/boards.ts); kind and slug are null when none was found.
+CREATE TABLE IF NOT EXISTS boards (
+  company_key TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT,
+  slug TEXT,
+  checked_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER REFERENCES runs(id),
@@ -97,6 +107,19 @@ export const companyKey = (company: string) => norm(company).replace(/ /g, "");
 
 export const dedupeKey = (company: string, title: string) => `${norm(company).replace(/ /g, "")}|${norm(title)}`;
 
+type JobRow = Omit<Posting, "hiddenText"> & { id: string; status: JobStatus; first_run: number; manual: number; hidden: string };
+
+/** A stored job as the pipeline reads it. */
+export interface StoredJob { id: string; status: JobStatus; firstRun: number; manual: boolean; posting: Posting }
+
+const toJob = ({ id, status, first_run, manual, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }: JobRow): StoredJob => ({
+  id,
+  status,
+  firstRun: first_run,
+  manual: manual === 1,
+  posting: { source, company, title, location, url, description, comp, workplace, applicants, posted, hiddenText: JSON.parse(hidden) as string[] },
+});
+
 export class Store {
   readonly db: DatabaseSync;
 
@@ -111,8 +134,20 @@ export class Store {
     if (!cols.some((c) => c.name === "kind")) this.db.exec("ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'scan'");
     const jobCols = new Set((this.db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
     // Columns added after the first schema; each stage stores its full JSON result for the dashboard.
-    for (const [col, def] of [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"]] as const)
-      if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
+    // `manual` marks a job you added by hand, which re-screening must leave queued.
+    // `applied_at`, `replied_at` and `followed_up_at` time the application, for follow-ups and reply times.
+    const jobColumns = [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"],
+      ["manual", "INTEGER NOT NULL DEFAULT 0"], ["applied_at", "TEXT"], ["replied_at", "TEXT"], ["followed_up_at", "TEXT"],
+      // The job's own posting on its company's board, for a job first seen on LinkedIn or HN.
+      ["board_url", "TEXT"]] as const;
+    for (const [col, def] of jobColumns) if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
+    // Jobs applied to before the dates were kept: read them from the status changes in the event log.
+    if (!jobCols.has("applied_at")) {
+      const first = (to: string) => `(SELECT min(at) FROM events e WHERE e.job_id = jobs.id AND e.message LIKE '%→ ${to}%')`;
+      this.db.exec(`UPDATE jobs SET applied_at = coalesce(${first("applied")}, ${first("interview")}, ${first("rejected")}) WHERE status IN ('applied', 'interview', 'rejected')`);
+      this.db.exec(`UPDATE jobs SET replied_at = min(coalesce(${first("interview")}, '~'), coalesce(${first("rejected")}, '~')) WHERE status IN ('interview', 'rejected')`);
+      this.db.exec("UPDATE jobs SET replied_at = NULL WHERE replied_at = '~'");
+    }
     const callCols = new Set((this.db.prepare("PRAGMA table_info(llm_calls)").all() as { name: string }[]).map((c) => c.name));
     for (const col of ["cache_read_tokens", "cache_write_tokens"])
       if (!callCols.has(col)) this.db.exec(`ALTER TABLE llm_calls ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
@@ -143,7 +178,7 @@ export class Store {
     this.db.prepare("UPDATE runs SET finished_at = ?, status = ?, stats = ? WHERE id = ?").run(now(), status, JSON.stringify(stats), id);
   }
 
-  event(runId: number, stage: string, message: string, level: "info" | "warn" | "error" = "info", jobId?: string): void {
+  event(runId: number, stage: EventStage, message: string, level: "info" | "warn" | "error" = "info", jobId?: string): void {
     this.db.prepare("INSERT INTO events (run_id, job_id, at, level, stage, message) VALUES (?, ?, ?, ?, ?, ?)")
       .run(runId, jobId ?? null, now(), level, stage, message);
   }
@@ -157,7 +192,8 @@ export class Store {
   upsert(runId: number, s: Screened, fresh: boolean): { id: string; isNew: boolean } {
     const p = s.posting;
     const key = dedupeKey(p.company, p.title);
-    const existing = this.db.prepare("SELECT id FROM jobs WHERE dedupe_key = ?").get(key) as { id: string } | undefined;
+    // A board posting already known as a LinkedIn job's own posting is that job, even if the titles differ a little.
+    const existing = this.db.prepare("SELECT id FROM jobs WHERE dedupe_key = ? OR board_url = ?").get(key, p.url) as { id: string } | undefined;
     if (existing) {
       // Refresh fields the source may correct, but only from the source the job was stored from: a LinkedIn
       // sighting of an Ashby job must not overwrite Ashby's own dates. Status is decided once, at first sight.
@@ -183,19 +219,33 @@ export class Store {
     return { id, isNew: true };
   }
 
+  /**
+   * A job you added by hand: stored like a scanned one, then queued for scoring even if a hard rule rejects it, since
+   * you chose it. A job seen before but never scored (filtered, or older than the window) is queued again; any other
+   * known job is left where it is.
+   */
+  addByHand(runId: number, s: Screened): { id: string; isNew: boolean; status: JobStatus } {
+    const { id, isNew } = this.upsert(runId, s, true);
+    const { status } = this.db.prepare("SELECT status FROM jobs WHERE id = ?").get(id) as { status: JobStatus };
+    if (!isNew && status !== "filtered" && status !== "stale") return { id, isNew, status };
+    this.db.prepare("UPDATE jobs SET status = 'new', manual = 1 WHERE id = ?").run(id);
+    return { id, isNew, status: "new" };
+  }
+
   /** Stored postings in the given statuses, for re-screening after a rule or config change. */
-  postings(statuses: JobStatus[]): { id: string; firstRun: number; posting: Posting }[] {
+  postings(statuses: JobStatus[]): StoredJob[] {
     const rows = this.db.prepare(`SELECT * FROM jobs WHERE status IN (${statuses.map(() => "?").join(",")})`).all(...statuses);
-    return (rows as unknown as (Omit<Posting, "hiddenText"> & { id: string; first_run: number; hidden: string })[]).map(({ id, first_run, hidden, source, company, title, location, url, description, comp, workplace, applicants, posted }) => ({
-      id,
-      firstRun: first_run,
-      posting: { source, company, title, location, url, description, comp, workplace, applicants, posted, hiddenText: JSON.parse(hidden) as string[] },
-    }));
+    return (rows as unknown as JobRow[]).map(toJob);
   }
 
   posting(id: string): Posting | null {
-    const all = this.postings(["new", "filtered", "stale", "screened", "needs_review", "apply", "maybe", "skip", "cv_ready", "applied", "interview", "rejected", "dismissed"]);
-    return all.find((p) => p.id === id)?.posting ?? null;
+    const row = this.db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as JobRow | undefined;
+    return row ? toJob(row).posting : null;
+  }
+
+  /** Refresh what the rules read from a job's text, without touching its status. */
+  updateSignals(id: string, s: Screened): void {
+    this.db.prepare("UPDATE jobs SET signals = ? WHERE id = ?").run(JSON.stringify(s.signals), id);
   }
 
   updateScreen(id: string, s: Screened, fresh: boolean): void {
@@ -209,8 +259,32 @@ export class Store {
       .all(`%${company}%`, `%${title}%`) as never;
   }
 
+  /**
+   * Also keeps the application's dates: applying sets `applied_at` once, the first interview or rejection sets
+   * `replied_at`, and moving back before applying (an undo, a re-vet) clears them.
+   */
   setStatus(id: string, status: JobStatus): void {
-    this.db.prepare("UPDATE jobs SET status = ? WHERE id = ?").run(status, id);
+    const sent = ["applied", "interview", "rejected"].includes(status);
+    const replied = status === "interview" || status === "rejected";
+    const t = now();
+    this.db.prepare(
+      `UPDATE jobs SET status = ?,
+         applied_at = CASE WHEN ? THEN coalesce(applied_at, ?) END,
+         replied_at = CASE WHEN ? THEN coalesce(replied_at, ?) END,
+         followed_up_at = CASE WHEN ? THEN followed_up_at END
+       WHERE id = ?`,
+    ).run(status, sent ? 1 : 0, t, replied ? 1 : 0, t, sent ? 1 : 0, id);
+  }
+
+  /** You chased an application up: the follow-up reminder starts again from today. */
+  markFollowedUp(id: string): void {
+    this.db.prepare("UPDATE jobs SET followed_up_at = ? WHERE id = ? AND status = 'applied'").run(now(), id);
+  }
+
+  /** Applications with no reply since they were sent, or last followed up, `days` or more ago. */
+  followUpsDue(days: number): { id: string; company: string; title: string }[] {
+    const before = new Date(Date.now() - days * 86_400_000).toISOString();
+    return this.db.prepare("SELECT id, company, title FROM jobs WHERE status = 'applied' AND coalesce(followed_up_at, applied_at) <= ?").all(before) as never;
   }
 
   company(key: string, maxAgeDays: number): unknown | null {
@@ -250,16 +324,54 @@ export class Store {
     this.db.prepare("UPDATE jobs SET company_key = ? WHERE id = ?").run(key, id);
   }
 
-  /** Jobs waiting for the LLM stages, best first: highest posted band, then fewest applicants, then newest. */
-  queue(limit: number): { id: string; posting: Posting }[] {
+  /** Jobs waiting for the LLM stages, best first: highest posted band, then fewest applicants, then newest. `only` limits it to those IDs. */
+  queue(limit: number, only?: string[]): { id: string; posting: Posting }[] {
+    const where = only?.length ? `AND id IN (${only.map(() => "?").join(",")})` : "";
     const rows = this.db.prepare(
-      `SELECT id FROM jobs WHERE status = 'new'
+      `SELECT * FROM jobs WHERE status = 'new' ${where}
        ORDER BY coalesce(json_extract(signals, '$.bandTopEur'), 0) DESC, coalesce(json_extract(signals, '$.applicants'), 100) ASC, posted DESC
        LIMIT ?`,
-    ).all(limit) as { id: string }[];
-    const ids = new Set(rows.map((r) => r.id));
-    const all = this.postings(["new"]).filter((p) => ids.has(p.id));
-    return rows.map((r) => all.find((p) => p.id === r.id)!).map(({ id, posting }) => ({ id, posting }));
+    ).all(...(only ?? []), limit) as unknown as JobRow[];
+    return rows.map(toJob).map(({ id, posting }) => ({ id, posting }));
+  }
+
+  /** A company's display name: from the config, else from the board found for it, else as the source gave it. */
+  companyName(company: string, configured: Record<string, string>): string {
+    return configured[company] ?? (this.db.prepare("SELECT name FROM boards WHERE slug = ?").get(company) as { name: string } | undefined)?.name ?? company;
+  }
+
+  /** Boards found for companies, to scan alongside the configured ones. */
+  boards(): { kind: AtsKind; slug: string; name: string }[] {
+    return this.db.prepare("SELECT kind, slug, name FROM boards WHERE slug IS NOT NULL ORDER BY name").all() as never;
+  }
+
+  /** The board found for a company: undefined if not checked in `maxAgeDays`, null if checked and none found. */
+  board(key: string, maxAgeDays: number): { kind: AtsKind; slug: string } | null | undefined {
+    const row = this.db.prepare("SELECT kind, slug, checked_at FROM boards WHERE company_key = ?").get(key) as { kind: AtsKind | null; slug: string | null; checked_at: string } | undefined;
+    if (!row) return undefined;
+    if (row.kind && row.slug) return { kind: row.kind, slug: row.slug };
+    return Date.now() - Date.parse(row.checked_at) > maxAgeDays * 86_400_000 ? undefined : null;
+  }
+
+  saveBoard(key: string, name: string, found: { kind: AtsKind; slug: string } | null): void {
+    this.db.prepare("INSERT INTO boards (company_key, name, kind, slug, checked_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(company_key) DO UPDATE SET name = excluded.name, kind = excluded.kind, slug = excluded.slug, checked_at = excluded.checked_at")
+      .run(key, name, found?.kind ?? null, found?.slug ?? null, now());
+  }
+
+  /** Jobs worth finding on their company's board: seen only on LinkedIn, HN or a pasted link, and still in play. */
+  boardCandidates(): { id: string; company: string; title: string }[] {
+    return this.db.prepare(
+      `SELECT id, company, title FROM jobs WHERE source IN ('linkedin', 'hn', 'manual') AND board_url IS NULL
+       AND status IN ('needs_review', 'apply', 'maybe', 'cv_ready', 'applied', 'interview') ORDER BY first_seen DESC`,
+    ).all() as never;
+  }
+
+  setBoardUrl(id: string, url: string): void {
+    this.db.prepare("UPDATE jobs SET board_url = ? WHERE id = ?").run(url, id);
+  }
+
+  boardUrl(id: string): string | null {
+    return (this.db.prepare("SELECT board_url FROM jobs WHERE id = ?").get(id) as { board_url: string | null } | undefined)?.board_url ?? null;
   }
 
   hasEmail(messageId: string): boolean {

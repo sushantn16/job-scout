@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ago, post, usePoll, type JobRow, type Status } from "./api";
-import { td, th } from "./Board";
-import { Button, Card, Pill, StatusPill } from "./ui";
+import { Button, Card, Pill, StatusPill, td, th } from "./ui";
 
 interface Email {
   id: number;

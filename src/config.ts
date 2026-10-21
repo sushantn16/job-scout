@@ -10,8 +10,12 @@ export const Config = z.object({
     maxYearsRequired: z.number().int(),
     minBandTopEur: z.number(),
     germanBlocksAt: z.enum(["required", "plus"]),
+    /** Postings by a recruiter for a client, or reposted by a job board: score them with a badge, or skip them. */
+    recruiters: z.enum(["flag", "skip"]).default("flag"),
   }),
   caps: z.object({ vetPerRun: z.number().int(), tailorPerRun: z.number().int() }),
+  /** Days without a reply before an application is due a follow-up. */
+  followUpDays: z.number().int().positive().default(10),
   freshness: z.object({ minHours: z.number(), maxHours: z.number() }),
   /** Fit-score weights (see src/vet/score.ts); all but remoteBonus should sum to 100. */
   vet: z.object({
@@ -51,4 +55,25 @@ export type Config = z.infer<typeof Config>;
 /** Your own settings in the git-ignored config/job-scout.local.json win over the example in config/job-scout.json. */
 const defaultPath = () => (existsSync("config/job-scout.local.json") ? "config/job-scout.local.json" : "config/job-scout.json");
 
-export const loadConfig = (path = defaultPath()): Config => Config.parse(JSON.parse(readFileSync(path, "utf8")));
+/**
+ * The search filters you edit on the dashboard's Preferences page. They live in the data volume, so they survive an
+ * image rebuild (config/ is baked into the image), and they win over the config file.
+ */
+export const SEARCH_PATH = "data/private/search.json";
+export const Search = z.object({
+  profile: Config.shape.profile,
+  locations: Config.shape.locations,
+  titleInclude: Pattern,
+  titleExclude: Pattern,
+  companyExclude: Pattern,
+  followUpDays: z.number().int().positive(),
+  vet: z.object({ applyAt: z.number(), maybeAt: z.number() }).refine((v) => v.applyAt > v.maybeAt, "the apply line must be above the maybe line"),
+}).partial();
+export type Search = z.infer<typeof Search>;
+
+/** `searchPath` null ignores saved search filters (tests use the example config as it is). */
+export function loadConfig(path = defaultPath(), searchPath: string | null = SEARCH_PATH): Config {
+  const base = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown> & { vet?: object };
+  const search = searchPath && existsSync(searchPath) ? Search.parse(JSON.parse(readFileSync(searchPath, "utf8"))) : {};
+  return Config.parse({ ...base, ...search, vet: { ...base.vet, ...search.vet } });
+}

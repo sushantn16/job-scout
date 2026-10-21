@@ -32,9 +32,11 @@ type Target = { via: "greenhouse"; board: string; jobId: string; url: string } |
 
 /** Where a job's form is. `override` is a URL pasted by you; otherwise only ATS sources know their form. */
 export function formTarget(p: Pick<Posting, "source" | "company" | "url">, override?: string): Target | null {
-  const url = override?.trim() || (["ashby", "greenhouse", "lever", "personio"].includes(p.source) ? p.url : "");
+  const url = override?.trim() || (["ashby", "greenhouse", "lever", "personio", "manual"].includes(p.source) ? p.url : "");
   if (!url) return null;
   const u = new URL(url);
+  // A job added by hand from a LinkedIn link: LinkedIn pages aren't read (rate limits, terms), so the form needs its own link.
+  if (!override && /(^|\.)linkedin\.com$/.test(u.host)) return null;
   const path = u.pathname.replace(/\/+$/, "");
   if (/(^|\.)greenhouse\.io$/.test(u.host)) {
     const m = path.match(/^\/(?:embed\/job_app)?\/?([^/]+)\/jobs\/(\d+)/);

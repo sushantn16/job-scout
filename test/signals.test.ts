@@ -1,7 +1,7 @@
 // Cases are real sentences from postings seen on 2026-10-17.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applicantCount, germanRequirement, salaryBand, workplace, yearsRequired } from "../src/filter/signals.ts";
+import { applicantCount, germanRequirement, recruiterPosting, salaryBand, workplace, yearsRequired } from "../src/filter/signals.ts";
 
 test("German: required phrasings", () => {
   for (const s of [
@@ -30,6 +30,9 @@ test("German: country and market mentions are not language requirements", () => 
     "positioning to resonate with enterprise decision-makers in the German market",
     // Statista, falsely rejected in run 1: "level" belongs to "Junior-level", not to German.
     "Some of the benefits listed here apply only to the German entity and to Junior-level roles or above.",
+    // Talon.One, falsely rejected on 2026-10-19: German lessons are a benefit.
+    "€1,000 annual learning budget and free German language courses to boost your skills",
+    "Free German lessons and a relocation package.",
   ]) assert.equal(germanRequirement(s).value, "none", s);
 });
 
@@ -75,4 +78,28 @@ test("workplace and applicants", () => {
   assert.equal(workplace("", "Hybrid working: We are usually in our Berlin office 3 days a week").value, "hybrid");
   assert.equal(applicantCount("Over 200 applicants"), 200);
   assert.equal(applicantCount("Be among the first 25 applicants"), 25);
+});
+
+// Real sentences from postings scored on 2026-10-17–20.
+test("recruiter postings: a recruiter writing for a client says so", () => {
+  for (const s of [
+    "That is exactly what our client is building.", // Stott and May
+    "Our client is a high-growth technology organization building an advanced AI platform.", // MLabs
+    "We’re partnering with a fast-growing, well-funded technology company that is building next-generation AI-powered software products.", // Annapurna IT
+    "We are recruiting on behalf of a client in Berlin.",
+    "Our client offers an AI platform that helps MedTech companies simplify regulatory compliance.", // Bluebird
+    "We’re working with an established technology business that is continuing to invest heavily.", // Digital Waffle
+  ]) assert.equal(recruiterPosting(s).value, true, s);
+});
+
+test("recruiter postings: employers' own recruiters, scams warnings and agency experience are not", () => {
+  for (const s of [
+    "Quick call with our recruiter to confirm some facts", // Kombo
+    "Beware of recruitment scams: DoorDash, Deliveroo, and Wolt will never ask you to pay money.", // Wolt
+    "Work effectively as part of a global, cross-functional team, partnering with fellow engineers, product managers, designers", // Navan
+    "Consulting or agency experience working directly with enterprise clients, ideally in regulated environments", // Overfly
+    "You know what belongs on the client and what belongs on the server.", // Gigs
+    "We build software for our clients in logistics.",
+    "Together with the Public API and Tooling Apps teams we enable Upvest’s business to scale efficiently, accelerate our client’s time-to-market.", // Upvest
+  ]) assert.equal(recruiterPosting(s).value, false, s);
 });

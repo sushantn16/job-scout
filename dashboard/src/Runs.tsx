@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { duration, getJson, usd, type Event, type Run } from "./api";
-import { td, th } from "./Board";
-import { Card, cx, RunPill } from "./ui";
+import { cx, RunPill, td, th } from "./ui";
 
-const statsLine = (r: Run) => {
+/** One run's result in words, e.g. "125 relevant · 8 fresh · 1 apply · 2 maybe · 5 skip". */
+export const statsLine = (r: Run) => {
   const s = (r.stats ?? {}) as Record<string, unknown>;
   const vet = (s.vet ?? (typeof s.processed === "number" ? s : undefined)) as Record<string, number> | undefined;
   const inbox = s.inbox as Record<string, number> | null | undefined;
@@ -48,34 +48,28 @@ export function Log({ run }: { run: Run }) {
   );
 }
 
-export function Runs({ runs }: { runs: Run[] }) {
-  const [selected, setSelected] = useState<number | null>(null);
-  const run = runs.find((r) => r.id === selected) ?? runs[0];
+/** Every recent run; picking one shows it in the diagram, stage cards and event log above. */
+export function RunHistory({ runs, selected, onSelect }: { runs: Run[]; selected: number; onSelect: (id: number) => void }) {
   return (
-    <div className="grid gap-4">
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr>{["Run", "Kind", "Started", "Duration", "Status", "Result", "LLM cost"].map((h) => <th key={h} className={h === "LLM cost" ? `${th} text-right` : th}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {runs.map((r) => (
-            <tr key={r.id} onClick={() => setSelected(r.id)} aria-selected={r.id === run?.id} className={cx("cursor-pointer hover:bg-hover", r.id === run?.id && "bg-hover")}>
-              <td className={td}>#{r.id}</td>
-              <td className={td}>{r.kind}</td>
-              <td className={td}>{new Date(r.started_at).toLocaleString()}</td>
-              <td className={td}>{duration(r.started_at, r.finished_at)}</td>
-              <td className={td}><RunPill status={r.status} /></td>
-              <td className={`${td} text-muted`}>{statsLine(r)}</td>
-              <td className={`${td} text-right tabular-nums`}>{usd(r.cost)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {run ? (
-        <Card title={`Run #${run.id} events`}>
-          <Log run={run} />
-        </Card>
-      ) : null}
-    </div>
+    <table className="w-full border-collapse text-[13px]">
+      <thead>
+        <tr>{["Run", "Kind", "Started", "Duration", "Status", "Result", "LLM cost"].map((h) => <th key={h} className={h === "LLM cost" ? `${th} text-right` : th}>{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {runs.map((r) => (
+          <tr key={r.id} onClick={() => onSelect(r.id)} aria-selected={r.id === selected} className={cx("cursor-pointer hover:bg-hover", r.id === selected && "bg-hover")}>
+            <td className={td}>
+              <button className="cursor-pointer font-semibold text-ink hover:underline" onClick={(e) => (e.stopPropagation(), onSelect(r.id))}>#{r.id}</button>
+            </td>
+            <td className={td}>{r.kind}</td>
+            <td className={`${td} whitespace-nowrap`}>{new Date(r.started_at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+            <td className={`${td} whitespace-nowrap`}>{duration(r.started_at, r.finished_at)}</td>
+            <td className={td}><RunPill status={r.status} /></td>
+            <td className={`${td} text-muted`}>{statsLine(r)}</td>
+            <td className={`${td} text-right tabular-nums`}>{usd(r.cost)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

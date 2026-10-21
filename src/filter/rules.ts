@@ -1,6 +1,6 @@
 import type { Config } from "../config.ts";
 import type { Posting } from "../sources/types.ts";
-import { applicantCount, germanRequirement, salaryBand, workplace, yearsRequired, type Band, type Evidence, type GermanLevel, type Workplace } from "./signals.ts";
+import { applicantCount, germanRequirement, recruiterPosting, salaryBand, workplace, yearsRequired, type Band, type Evidence, type GermanLevel, type Workplace } from "./signals.ts";
 
 export interface Signals {
   locationMatch: string;
@@ -10,6 +10,8 @@ export interface Signals {
   bandTopEur: number | null;
   workplace: Evidence<Workplace>;
   applicants: number | null;
+  /** Absent on jobs stored before it existed, until `pnpm rescreen` refreshes their signals. */
+  recruiter?: Evidence<boolean>;
 }
 
 export interface Screened {
@@ -49,6 +51,7 @@ export function screen(p: Posting, cfg: Config): Screened {
     bandTopEur: band.value ? Math.round(band.value.max * cfg.fxToEur[band.value.currency]) : null,
     workplace: workplace(p.workplace, p.description),
     applicants: applicantCount(p.applicants),
+    recruiter: recruiterPosting(p.description),
   };
   const rejections: string[] = [];
   const g = signals.german.value;
@@ -57,5 +60,6 @@ export function screen(p: Posting, cfg: Config): Screened {
     rejections.push(`${signals.years.value}+ years required: ${signals.years.evidence}`);
   if (signals.bandTopEur !== null && signals.bandTopEur < cfg.profile.minBandTopEur)
     rejections.push(`band tops out at €${Math.round(signals.bandTopEur / 1000)}K: ${band.evidence}`);
+  if (cfg.profile.recruiters === "skip" && signals.recruiter?.value) rejections.push(`recruiter posting: ${signals.recruiter.evidence}`);
   return { posting: p, signals, rejections };
 }

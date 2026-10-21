@@ -19,6 +19,8 @@ const GERMAN = String.raw`\b(?:german|deutsch)\b`;
 const NEAR = String.raw`(?:\W+\w+){0,5}?\W+`;
 const GERMAN_LANGUAGE = new RegExp(String.raw`(?:${CONTEXT})${NEAR}${GERMAN}|${GERMAN}${NEAR}(?:${CONTEXT})|\bdeutsch(?:kenntnisse|sprachig)`, "i");
 const OPTIONAL = /\b(a (big |huge )?plus|nice[- ]to[- ]have|bonus|advantage\w*|helpful|not required|preferred|ideally|von vorteil|wünschenswert)\b/i;
+// German lessons on the benefits list are an offer, not a requirement (Talon.One was falsely rejected for one).
+const BENEFIT = /\b(?:german|deutsch)\w*(?:[- ]language)?[- ](?:courses?|lessons?|classes|tuition|tutoring)\b|\blearn(?:ing)? german\b|\bsprachkurs/i;
 
 /** Rough check for postings written in German: such roles effectively require German. */
 export function isGermanText(text: string): boolean {
@@ -28,13 +30,23 @@ export function isGermanText(text: string): boolean {
   return de > 15 && de > en;
 }
 
+// A recruiter writing for a client says so, with the client as the subject ("our client is building"). Employers'
+// own "our recruiter", "recruitment scams" and their customers ("our client’s time-to-market", Upvest) don't match.
+const RECRUITER = /\b(?:our|my) client (?:is|are|was|has|have|offers|builds|operates|develops|provides|seeks|needs|wants|works|helps|enables|creates|makes)\b|\bon behalf of (?:our|a|an|one of our) (?:client|partner)\b|\bwe(?:['’]re| are) (?:partnering|working) with an? \b[^.]{0,80}?\b(?:company|startup|scale-?up|business|organi[sz]ation|client|firm)\b/i;
+
+/** Whether the posting says it's written by a recruiter for a client, with the sentence that says so. */
+export function recruiterPosting(text: string): Evidence<boolean> {
+  const s = sentences(text).find((x) => RECRUITER.test(x));
+  return s ? { value: true, evidence: s } : { value: false, evidence: "" };
+}
+
 export type GermanLevel = "required" | "plus" | "none";
 
 export function germanRequirement(text: string): Evidence<GermanLevel> {
   if (isGermanText(text)) return { value: "required", evidence: "posting is written in German" };
   let plus: string | undefined;
   for (const s of sentences(text)) {
-    if (!GERMAN_LANGUAGE.test(s)) continue;
+    if (!GERMAN_LANGUAGE.test(s) || BENEFIT.test(s)) continue;
     if (OPTIONAL.test(s)) plus ??= s;
     else return { value: "required", evidence: s };
   }

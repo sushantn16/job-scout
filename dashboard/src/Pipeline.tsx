@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { duration, usd, usePoll, type Run } from "./api";
-import { Diagram } from "./Diagram";
-import { Log } from "./Runs";
-import { Banner, Button, Card, cx, Pill } from "./ui";
+import { duration, usd, usePoll, type PipelineStage as Stage, type Run } from "./api";
+import { Diagram, KindTag } from "./Diagram";
+import { Log, RunHistory } from "./Runs";
+import { Banner, Button, Card, cx, Pill, RunPill, Section } from "./ui";
 
-type StageStatus = "done" | "running" | "waiting" | "skipped" | "idle" | "failed";
-interface Stage { key: string; name: string; does: string; status: StageStatus; metrics: string[]; ms: number | null; cost: number; calls: number; errors: number }
+type StageStatus = Stage["status"];
 
 const TONE = { done: "good", running: "info", waiting: "neutral", skipped: "neutral", idle: "neutral", failed: "critical" } as const;
 const LABEL: Record<StageStatus, string> = { done: "Done", running: "Running", waiting: "Waiting", skipped: "Not in this run", idle: "Nothing new", failed: "Failed" };
@@ -25,6 +24,8 @@ function StageCard({ s, i }: { s: Stage; i: number }) {
       <div className="flex items-center gap-2">
         <span className="inline-grid size-5 place-items-center rounded-full bg-hover text-[11.5px] text-ink-2">{i + 1}</span>
         <span className="font-semibold">{s.name}</span>
+        <span className="flex-1" />
+        <KindTag kind={s.kind} />
       </div>
       <div><Pill tone={TONE[s.status]} pulse={s.status === "running"}>{LABEL[s.status]}</Pill></div>
       <div className="text-xs text-muted">{s.does}</div>
@@ -46,35 +47,33 @@ export function Pipeline({ runs, running, start }: { runs: Run[]; running: boole
   if (!data) return <div className="text-muted">Loading…</div>;
   const { run, stages } = data;
   const total = stages.reduce((s, x) => s + x.cost, 0);
+  const select = (id: number) => {
+    setPicked(id === runs[0]?.id ? null : id);
+    scrollTo({ top: 0, behavior: "smooth" });
+  };
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-muted">
-          Run{" "}
-          <select
-            value={picked ?? ""}
-            onChange={(e) => setPicked(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-md border border-line bg-raised px-1.5 py-0.5 text-ink"
-          >
-            <option value="">Latest (live if running)</option>
-            {runs.map((r) => <option key={r.id} value={r.id}>#{r.id} {r.kind} · {new Date(r.started_at).toLocaleString()}</option>)}
-          </select>
-        </label>
-        <span>
-          <strong>Run #{run.id}</strong>{" "}
-          <span className="text-muted">{run.kind} · started {new Date(run.started_at).toLocaleTimeString()} · {duration(run.started_at, run.finished_at)} · {usd(total)}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-lg">Run #{run.id}</h1>
+        <RunPill status={run.status} />
+        <span className="text-muted">
+          {run.kind} · {new Date(run.started_at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} ·{" "}
+          {duration(run.started_at, run.finished_at)} · {usd(total)}
         </span>
+        {picked ? <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Show the latest run</Button> : null}
         <span className="flex-1" />
         <span className="text-[12.5px] text-muted">Run one stage:</span>
         <Button size="sm" disabled={running} onClick={() => start("vet")}>Vet the queue</Button>
         <Button size="sm" disabled={running} onClick={() => start("tailor")}>Tailor "apply" jobs</Button>
       </div>
       <Card><Diagram stages={stages} /></Card>
-      <h2 className="text-[15px]">Stage details</h2>
-      <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
-        {stages.map((s, i) => <StageCard key={s.key} s={s} i={i} />)}
-      </div>
+      <Section title="Stage details">
+        <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+          {stages.map((s, i) => <StageCard key={s.key} s={s} i={i} />)}
+        </div>
+      </Section>
       <Card title="Event log"><Log run={run} /></Card>
+      <Card title="Run history"><RunHistory runs={runs} selected={run.id} onSelect={select} /></Card>
     </div>
   );
 }
