@@ -21,3 +21,22 @@ test("CV header: without links it keeps the two-column layout and order", () => 
   const order = ["mail", "phone", "linkedin", "pin"].map((s) => html.indexOf(cv.basics[{ mail: "email", phone: "phone", linkedin: "linkedin", pin: "location" }[s] as "email"]));
   assert.deepEqual([...order].sort((a, b) => a - b), order, "email, phone, LinkedIn, location");
 });
+
+test("CV projects: rendered between experience and education, with the name linked when a URL is given", () => {
+  const cv = example();
+  const html = renderCvHtml({
+    ...cv,
+    projects: [
+      { id: "p1", name: "tool-one", stack: "TypeScript, Docker", url: "github.com/alex-example/tool-one", text: "Does **one** thing." },
+      { id: "p2", name: "tool-two", text: "Does another." },
+    ],
+  });
+  assert.match(html, /<a href="https:\/\/github\.com\/alex-example\/tool-one"><strong>tool-one<\/strong><\/a> \(TypeScript, Docker\): Does <strong>one<\/strong> thing\./);
+  assert.match(html, /<li><strong>tool-two<\/strong>: Does another\.<\/li>/);
+  const at = (s: string) => html.indexOf(s);
+  assert.ok(at("<h2>Work Experience</h2>") < at("<h2>Projects</h2>") && at("<h2>Projects</h2>") < at("<h2>Education</h2>"));
+});
+
+test("CV projects: no section when there are none", () => {
+  assert.doesNotMatch(renderCvHtml(example()), /<h2>Projects<\/h2>/);
+});

@@ -93,7 +93,7 @@ export async function tailor(
     `Allowed headlines: ${headlines.join(" | ")}`,
   ].join("\n");
 
-  const masterText = [master.profile, ...master.skills.flatMap((s) => [s.label, ...s.items]), ...master.experience.flatMap((r) => [r.title, r.company, r.location, ...r.bullets.map((b) => b.text)]), ...master.education.flatMap((e) => [e.degree, e.school]), ...headlines, master.basics.location];
+  const masterText = [master.profile, ...master.skills.flatMap((s) => [s.label, ...s.items]), ...master.experience.flatMap((r) => [r.title, r.company, r.location, ...r.bullets.map((b) => b.text)]), ...(master.projects ?? []).flatMap((p) => [p.name, p.stack ?? "", p.text]), ...master.education.flatMap((e) => [e.degree, e.school]), ...headlines, master.basics.location];
   const masterCorpus = new Corpus(masterText);
   const appCorpus = new Corpus([...masterText, ...companyFacts, args.companyName, args.jobTitle, ...req.techStack, ...req.mustHave, ...req.responsibilities]);
 

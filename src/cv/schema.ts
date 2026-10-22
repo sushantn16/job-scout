@@ -15,6 +15,16 @@ export const Experience = z.object({
   bullets: z.array(Bullet).min(1),
 });
 
+export const Project = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** Shown after the name, e.g. "TypeScript, Claude, Docker". */
+  stack: z.string().optional(),
+  /** The name links here when set. */
+  url: z.string().optional(),
+  text: Text,
+});
+
 export const Cv = z.object({
   basics: z.object({
     name: z.string(),
@@ -33,6 +43,8 @@ export const Cv = z.object({
   profile: Text,
   skills: z.array(z.object({ id: z.string(), label: z.string(), items: z.array(z.string()).min(1) })),
   experience: z.array(Experience).min(1),
+  /** Optional; rendered between experience and education. Tailoring keeps them as they are. */
+  projects: z.array(Project).optional(),
   education: z.array(
     z.object({ id: z.string(), degree: z.string(), school: z.string(), year: z.string(), location: z.string() }),
   ),
