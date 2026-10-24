@@ -139,8 +139,21 @@ export class Store {
     const jobColumns = [["hidden", "TEXT NOT NULL DEFAULT '[]'"], ["screen", "TEXT"], ["vet", "TEXT"], ["tailor", "TEXT"], ["company_key", "TEXT"], ["form", "TEXT"],
       ["manual", "INTEGER NOT NULL DEFAULT 0"], ["applied_at", "TEXT"], ["replied_at", "TEXT"], ["followed_up_at", "TEXT"],
       // The job's own posting on its company's board, for a job first seen on LinkedIn or HN.
-      ["board_url", "TEXT"]] as const;
+      ["board_url", "TEXT"],
+      // When the status last changed, so a job left in maybe can be skipped after a while.
+      ["status_at", "TEXT"]] as const;
     for (const [col, def] of jobColumns) if (!jobCols.has(col)) this.db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${def}`);
+    // Jobs from before status_at: the last scoring result or status change in the event log, else when first seen.
+    if (!jobCols.has("status_at")) {
+      this.db.exec(`UPDATE jobs SET status_at = coalesce((SELECT max(at) FROM events e WHERE e.job_id = jobs.id
+        AND (e.message LIKE 'status %' OR (e.stage = 'vet' AND e.message NOT LIKE 'failed%'))), first_seen)`);
+    }
+    // Triggers rather than every writer setting it: status is written from the scan, the vetter, the inbox and the dashboard.
+    const at = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+    this.db.exec(`CREATE TRIGGER IF NOT EXISTS jobs_status_at_insert AFTER INSERT ON jobs
+      BEGIN UPDATE jobs SET status_at = ${at} WHERE id = NEW.id; END;
+      CREATE TRIGGER IF NOT EXISTS jobs_status_at_update AFTER UPDATE OF status ON jobs WHEN NEW.status IS NOT OLD.status
+      BEGIN UPDATE jobs SET status_at = ${at} WHERE id = NEW.id; END;`);
     // Jobs applied to before the dates were kept: read them from the status changes in the event log.
     if (!jobCols.has("applied_at")) {
       const first = (to: string) => `(SELECT min(at) FROM events e WHERE e.job_id = jobs.id AND e.message LIKE '%→ ${to}%')`;
@@ -284,6 +297,12 @@ export class Store {
   /** You chased an application up: the follow-up reminder starts again from today. */
   markFollowedUp(id: string): void {
     this.db.prepare("UPDATE jobs SET followed_up_at = ? WHERE id = ? AND status = 'applied'").run(now(), id);
+  }
+
+  /** Jobs left in maybe for `days` or more without a decision move to skip; returns the ones moved. */
+  expireMaybes(days: number): { id: string; company: string; title: string }[] {
+    const before = new Date(Date.now() - days * 86_400_000).toISOString();
+    return this.db.prepare("UPDATE jobs SET status = 'skip' WHERE status = 'maybe' AND status_at <= ? RETURNING id, company, title").all(before) as never;
   }
 
   /** Applications with no reply since they were sent, or last followed up, `days` or more ago. */

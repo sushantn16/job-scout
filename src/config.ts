@@ -16,6 +16,8 @@ export const Config = z.object({
   caps: z.object({ vetPerRun: z.number().int(), tailorPerRun: z.number().int() }),
   /** Days without a reply before an application is due a follow-up. */
   followUpDays: z.number().int().positive().default(10),
+  /** Days a job can stay in maybe without a decision before a scan moves it to skip. */
+  maybeDays: z.number().int().positive().default(5),
   freshness: z.object({ minHours: z.number(), maxHours: z.number() }),
   /** Fit-score weights (see src/vet/score.ts); all but remoteBonus should sum to 100. */
   vet: z.object({
@@ -67,6 +69,7 @@ export const Search = z.object({
   titleExclude: Pattern,
   companyExclude: Pattern,
   followUpDays: z.number().int().positive(),
+  maybeDays: z.number().int().positive(),
   vet: z.object({ applyAt: z.number(), maybeAt: z.number() }).refine((v) => v.applyAt > v.maybeAt, "the apply line must be above the maybe line"),
 }).partial();
 export type Search = z.infer<typeof Search>;

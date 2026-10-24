@@ -222,7 +222,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     // The Preferences page: the search filters in effect, what the scorer reads about you, and saved form answers.
     ["GET", /^\/api\/preferences$/, (_req, res) => {
       json(res, 200, {
-        search: { profile: cfg.profile, locations: cfg.locations, titleInclude: cfg.titleInclude, titleExclude: cfg.titleExclude, companyExclude: cfg.companyExclude, followUpDays: cfg.followUpDays, vet: { applyAt: cfg.vet.applyAt, maybeAt: cfg.vet.maybeAt } },
+        search: { profile: cfg.profile, locations: cfg.locations, titleInclude: cfg.titleInclude, titleExclude: cfg.titleExclude, companyExclude: cfg.companyExclude, followUpDays: cfg.followUpDays, maybeDays: cfg.maybeDays, vet: { applyAt: cfg.vet.applyAt, maybeAt: cfg.vet.maybeAt } },
         prefs: loadPreferences(),
         answers: loadAnswers(),
         answerTopics: STANDARD,

@@ -108,7 +108,7 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
           { label: "Ready to apply", value: (c.cv_ready ?? 0) + (c.apply ?? 0), sub: `${c.cv_ready ?? 0} with a tailored CV` },
           { label: "Applied", value: (c.applied ?? 0) + (c.interview ?? 0) + (c.rejected ?? 0), sub: `${c.interview ?? 0} interview${c.interview === 1 ? "" : "s"} · ${c.rejected ?? 0} rejected` },
           { label: "Waiting for a reply", value: c.applied ?? 0, sub: waitingSub },
-          { label: "To decide", value: c.maybe ?? 0, sub: `${c.skip ?? 0} skipped by the score` },
+          { label: "To decide", value: c.maybe ?? 0, sub: `${c.skip ?? 0} skipped` },
           { label: "LLM spend, 30 days", value: summary ? usd(summary.cost30d) : "–", sub: summary?.pricingNote ? "list prices, see config" : undefined },
         ]}
       />

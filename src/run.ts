@@ -52,6 +52,9 @@ const inbox = processInbox(store, cfg, runId).catch((e: Error) => (log("inbox", 
 
 try {
   log("run", `freshness window starts ${since.toISOString()}`);
+  const expired = store.expireMaybes(cfg.maybeDays);
+  for (const j of expired) store.event(runId, "vet", `no decision in ${cfg.maybeDays} days: maybe → skip`, "info", j.id);
+  if (expired.length) log("vet", `${expired.length} job(s) left in maybe for ${cfg.maybeDays}+ days moved to skip`);
   // The configured boards, plus the ones found for companies first seen on LinkedIn or HN (src/pipeline/boards.ts).
   const configured = (Object.keys(ATS) as AtsKind[]).flatMap((kind) => cfg.sources[kind].map((slug) => ({ kind, slug })));
   const found = store.boards().filter((b) => !configured.some((c) => c.kind === b.kind && c.slug === b.slug));

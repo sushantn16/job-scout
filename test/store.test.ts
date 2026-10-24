@@ -119,3 +119,62 @@ test("a job its employer renamed is the same job, not a new one (run 29 failed o
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a job left in maybe moves to skip after the set number of days, timed from when it became maybe", () => {
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const store = new Store(join(dir, "test.db"));
+    const cfg = loadConfig("config/job-scout.json", null);
+    const runId = store.startRun(new Date(), "scan");
+    const text = "You will own product features end to end in TypeScript and React, with a small team in Berlin. ".repeat(2);
+    const add = (company: string) => store.upsert(runId, screen(pasted({ url: `https://careers.${company}.com/1`, company, title: "Product Engineer", location: "Berlin", description: text }), cfg), true).id;
+    const [old, recent, applied] = [add("oldco"), add("recentco"), add("appliedco")];
+    for (const id of [old, recent]) store.setStatus(id, "maybe");
+    store.setStatus(applied, "applied");
+    const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+    store.db.prepare("UPDATE jobs SET status_at = ? WHERE id IN (?, ?)").run(daysAgo(6), old, applied);
+    store.db.prepare("UPDATE jobs SET status_at = ? WHERE id = ?").run(daysAgo(2), recent);
+
+    assert.deepEqual(store.expireMaybes(5).map((j) => j.id), [old]);
+    const status = (id: string) => (store.db.prepare("SELECT status, status_at FROM jobs WHERE id = ?").get(id) as { status: string; status_at: string });
+    assert.equal(status(old).status, "skip");
+    assert.ok(Date.now() - Date.parse(status(old).status_at) < 60_000, "the move itself restarts the clock");
+    assert.equal(status(recent).status, "maybe");
+    assert.equal(status(applied).status, "applied", "only maybe jobs expire");
+    assert.deepEqual(store.expireMaybes(5), [], "nothing left to move");
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("status_at: set on insert and on every status change; older databases get it from the event log", () => {
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const path = join(dir, "test.db");
+    let store = new Store(path);
+    const cfg = loadConfig("config/job-scout.json", null);
+    const runId = store.startRun(new Date(), "scan");
+    const text = "You will own product features end to end in TypeScript and React, with a small team in Berlin. ".repeat(2);
+    const id = store.upsert(runId, screen(pasted({ url: "https://careers.acme.com/1", company: "acme", title: "Product Engineer", location: "Berlin", description: text }), cfg), true).id;
+    const statusAt = () => (store.db.prepare("SELECT status_at FROM jobs WHERE id = ?").get(id) as { status_at: string | null }).status_at;
+    assert.match(statusAt() ?? "", /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/, "same ISO form as the other dates");
+
+    // An older database: no column, no triggers, a vet result in the event log.
+    store.db.exec("DROP TRIGGER jobs_status_at_insert; DROP TRIGGER jobs_status_at_update; ALTER TABLE jobs DROP COLUMN status_at");
+    store.db.prepare("INSERT INTO events (run_id, job_id, at, level, stage, message) VALUES (?, ?, ?, 'info', 'vet', 'maybe (70): ok')").run(runId, id, "2026-10-01T10:00:00.000Z");
+    store.db.prepare("INSERT INTO events (run_id, job_id, at, level, stage, message) VALUES (?, ?, ?, 'error', 'vet', 'failed: later')").run(runId, id, "2026-10-03T10:00:00.000Z");
+    store.db.close();
+    store = new Store(path);
+    assert.equal(statusAt(), "2026-10-01T10:00:00.000Z", "the last scoring result, not a failed attempt");
+
+    store.setStatus(id, "maybe");
+    assert.notEqual(statusAt(), "2026-10-01T10:00:00.000Z", "a status change moves it");
+    const before = statusAt();
+    store.setStatus(id, "maybe");
+    assert.equal(statusAt(), before, "writing the same status again doesn't");
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

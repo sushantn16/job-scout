@@ -13,6 +13,7 @@ interface SearchSettings {
   titleExclude: string;
   companyExclude: string;
   followUpDays: number;
+  maybeDays: number;
   vet: { applyAt: number; maybeAt: number };
 }
 interface Draft { search: SearchSettings; prefs: Prefs; answers: Record<string, string> }
@@ -206,7 +207,7 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           <LinesField label="Role titles to skip" hint="One per line; wins over the list on the left" value={text.titleExclude ?? ""} onChange={setLines("titleExclude")} rows={8} monospace />
           <LinesField label="Companies to skip" hint="One per line, e.g. recruiting agencies" value={text.companyExclude ?? ""} onChange={setLines("companyExclude")} rows={8} monospace />
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Apply at a score of" hint="Scored jobs at or above this are tailored">
             <input className={input} type="number" min={0} max={100} value={search.vet.applyAt} onChange={(e) => setSearch({ vet: { ...search.vet, applyAt: Number(e.target.value) } })} />
           </Field>
@@ -215,6 +216,9 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           </Field>
           <Field label="Follow up after (days)" hint="Applications with no reply by then get a reminder">
             <input className={input} type="number" min={1} max={60} value={search.followUpDays} onChange={(e) => setSearch({ followUpDays: Number(e.target.value) })} />
+          </Field>
+          <Field label="Skip maybes after (days)" hint="Jobs left in Maybe that long move to skipped on the next run">
+            <input className={input} type="number" min={1} max={60} value={search.maybeDays} onChange={(e) => setSearch({ maybeDays: Number(e.target.value) })} />
           </Field>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
