@@ -136,6 +136,11 @@ use its own model:
 
 Roles you leave unset use `JOB_SCOUT_MODEL`. Check the connection with `pnpm spike:llm`, which makes two small test calls.
 
+Optional: set `TAVILY_API_KEY` ([free plan](https://www.tavily.com/pricing): 1,000 credits a month) to add employee
+ratings from kununu and Glassdoor to company research. It costs 4 credits per company, and research is cached for 30
+days. Neither site is fetched; the ratings come from search snippets, and a rating is kept only if the snippet states it
+on the company's own page. Without a key, research shows links to the review sites instead.
+
 ### 3. Add your facts
 
 ```sh

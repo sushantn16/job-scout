@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fitScore, type Ratings, type Weights } from "../src/vet/score.ts";
+import { combineReviews, fitScore, type Ratings, type Weights } from "../src/vet/score.ts";
 import type { Signals } from "../src/filter/rules.ts";
 
 const W: Weights = { roleFit: 25, stackOverlap: 20, seniority: 10, aiRelevance: 10, funding: 8, culture: 8, english: 7, pay: 7, competition: 5, remoteBonus: 1 };
@@ -43,4 +43,20 @@ test("years asked and level scale seniority", () => {
 test("a mismatched corporate backend role lands well below maybe", () => {
   const r = fitScore({ roleFit: 1, stackOverlap: 1, aiRelevance: 0, level: "mid", stageAndFunding: "good", engineeringCulture: "unknown", englishFirst: "unknown" }, signals({ applicants: 200 }), W);
   assert.ok(r.score < 50, `got ${r.score}`);
+});
+
+test("employee reviews: combined by review count, and only enough poor reviews cost culture points", () => {
+  assert.deepEqual(combineReviews([{ site: "kununu", rating: 3.6, reviewCount: 97 }, { site: "glassdoor", rating: 3.4, reviewCount: 413 }]),
+    { rating: 3.4, count: 510, basis: "kununu 3.6 (97), glassdoor 3.4 (413)" });
+  assert.equal(combineReviews([{ site: "kununu", rating: 2.1, reviewCount: null }]), null, "a rating without a count is ignored");
+  assert.equal(combineReviews([]), null);
+
+  const culture = (reviews: Parameters<typeof combineReviews>[0]) =>
+    fitScore(best, signals(), W, combineReviews(reviews)).factors.find((f) => f.factor === "engineering culture")!;
+  assert.equal(culture([]).points, 8, "no reviews: unchanged");
+  assert.equal(culture([{ site: "kununu", rating: 4.2, reviewCount: 50 }]).points, 8);
+  assert.equal(culture([{ site: "kununu", rating: 2.5, reviewCount: 12 }]).points, 8, "too few reviews to count");
+  assert.equal(culture([{ site: "glassdoor", rating: 3.2, reviewCount: 80 }]).points, 4);
+  assert.equal(culture([{ site: "glassdoor", rating: 2.8, reviewCount: 80 }]).points, 0);
+  assert.match(culture([{ site: "glassdoor", rating: 3.2, reviewCount: 80 }]).basis, /employees rate it 3.2\/5/);
 });

@@ -10,6 +10,11 @@ import type { Tailored } from "./tailor.ts";
 
 const safe = (s: string) => s.replace(/[/\\:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80);
 const plain = (s: string) => s.replace(/\*\*/g, "");
+/** " 3.6/5 (97)" after a review link when research found the rating; older profiles have none. */
+const rated = (c: CompanyProfile, site: "kununu" | "glassdoor") => {
+  const r = (c.employeeReviews ?? []).find((x) => x.site === site);
+  return r ? ` ${r.rating}/5${r.reviewCount ? ` (${r.reviewCount})` : ""}` : "";
+};
 
 export const outputRoot = () => process.env.JOB_SCOUT_OUTPUT_DIR || "data/private/applications";
 
@@ -65,7 +70,7 @@ export function writeApplication(args: {
     `- Posting: ${p.url}`,
     `- Fit score **${v.fitScore}** (${v.decision}): ${v.factors.map((f) => `${f.factor} ${f.points}/${f.weight}`).join(" · ")}`,
     `- ${v.summary}`,
-    args.company ? `- Company: ${args.company.oneLiner} Reviews: [Glassdoor](${args.company.reviewLinks.glassdoor}) · [kununu](${args.company.reviewLinks.kununu})` : "- Company research: not available",
+    args.company ? `- Company: ${args.company.oneLiner} Reviews: [Glassdoor](${args.company.reviewLinks.glassdoor})${rated(args.company, "glassdoor")} · [kununu](${args.company.reviewLinks.kununu})${rated(args.company, "kununu")}` : "- Company research: not available",
     `- CV: \`${args.cvFile}\``,
     "",
     ...(traps.length

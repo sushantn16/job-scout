@@ -207,7 +207,10 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
                   ["Size", c.size ?? "unknown"],
                   ["Language", c.workingLanguage],
                   ["Website", c.website ? <a href={c.website} target="_blank" rel="noreferrer">{c.website}</a> : "not found"],
-                  ["Reviews", <><a href={c.reviewLinks.glassdoor} target="_blank" rel="noreferrer">Glassdoor</a> · <a href={c.reviewLinks.kununu} target="_blank" rel="noreferrer">kununu</a></>],
+                  ["Reviews", <>{(["glassdoor", "kununu"] as const).map((site, i) => {
+                    const r = c.employeeReviews?.find((x) => x.site === site);
+                    return <span key={site}>{i ? " · " : ""}<a href={r?.sourceUrl ?? c.reviewLinks[site]} target="_blank" rel="noreferrer">{site === "kununu" ? "kununu" : "Glassdoor"}</a>{r ? ` ${r.rating}/5${r.reviewCount ? ` (${r.reviewCount} reviews)` : ""}` : ""}</span>;
+                  })}</>],
                 ]}
               />
               <p className="my-3">{c.outlook}</p>

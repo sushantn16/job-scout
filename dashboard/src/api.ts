@@ -104,6 +104,8 @@ export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary"
     name: string; website: string | null; oneLiner: string; stage: string; size: string | null; outlook: string; workingLanguage: string;
     funding: Cited[]; engineeringCulture: Cited[]; redFlags: Cited[]; whyUsMaterial: Cited[];
     reviewLinks: { glassdoor: string; kununu: string }; researchedAt: string;
+    /** Missing on profiles researched before ratings were looked up. */
+    employeeReviews?: { site: "kununu" | "glassdoor"; rating: number; reviewCount: number | null; sourceUrl: string }[];
   } | null;
   cost: number;
   form: FormState | null;
