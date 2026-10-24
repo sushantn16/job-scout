@@ -1,8 +1,10 @@
-// The board: one column per stage, best score first. Drag a card to the next stage to change its status, or onto the
-// dismiss bar that appears while dragging; every move is also a button on the job's page, for keyboard use.
-import { useState, type DragEvent } from "react";
+// The board: one column per stage, best score first unless you pick another order. Drag a card to the next stage to
+// change its status, or onto the dismiss bar that appears while dragging; every move is also a button on the job's
+// page, for keyboard use.
+import { useEffect, useState, type DragEvent } from "react";
 import { ago, euro, followUpDue, post, usd, type JobRow, type Status, type Summary } from "./api";
 import { statsLine } from "./Runs";
+import { isSortId, sortJobs, SORTS, type SortId } from "./sort";
 import { Button, cx, Pill, Stats } from "./ui";
 
 type Open = (id: string) => void;
@@ -65,6 +67,12 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
   const [dragging, setDragging] = useState<JobRow | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortId>(() => {
+    const saved = localStorage.getItem("boardSort");
+    return isSortId(saved) ? saved : "score";
+  });
+  useEffect(() => localStorage.setItem("boardSort", sort), [sort]);
+  const sorted = sortJobs(jobs, sort);
   const c = summary?.counts ?? {};
   const last = summary?.runs.find((r) => r.kind === "scan" && r.status !== "running");
   const replies = summary?.replyDays ?? [];
@@ -104,17 +112,25 @@ export function Board({ jobs, summary, open, changed, notify }: { jobs: JobRow[]
           { label: "LLM spend, 30 days", value: summary ? usd(summary.cost30d) : "–", sub: summary?.pricingNote ? "list prices, see config" : undefined },
         ]}
       />
-      {last || c.new ? (
-        <p className="-mt-2 mb-0 px-0.5 text-[13px] text-muted">
-          {last ? `Last scan ${ago(last.started_at)}${statsLine(last) ? `: ${statsLine(last)}` : ""}. ` : ""}
-          {c.new ? `${c.new} job${c.new === 1 ? "" : "s"} queued for scoring. ` : ""}
-          <a href="#/pipeline">Pipeline</a>
-        </p>
-      ) : null}
+      <div className="-mt-2 flex flex-wrap items-center justify-between gap-2 px-0.5">
+        {last || c.new ? (
+          <p className="m-0 text-[13px] text-muted">
+            {last ? `Last scan ${ago(last.started_at)}${statsLine(last) ? `: ${statsLine(last)}` : ""}. ` : ""}
+            {c.new ? `${c.new} job${c.new === 1 ? "" : "s"} queued for scoring. ` : ""}
+            <a href="#/pipeline">Pipeline</a>
+          </p>
+        ) : <span />}
+        <label className="flex items-center gap-1.5 text-[13px] text-muted">
+          Sort by
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortId)} className="rounded-md border border-line bg-raised px-1.5 py-1 text-ink">
+            {SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </label>
+      </div>
 
       <div className="grid grid-cols-2 items-start gap-3 xl:grid-flow-col xl:auto-cols-fr xl:grid-cols-none">
         {columns.map((col) => {
-          const list = jobs.filter((j) => col.statuses.includes(j.status));
+          const list = sorted.filter((j) => col.statuses.includes(j.status));
           const all = expanded.has(col.title);
           const ok = accepts(col);
           return (
