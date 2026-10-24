@@ -23,10 +23,12 @@ export interface Candidate {
 }
 
 export const PREFS_PATH = "data/private/preferences.json";
+/** The master CV: every tailored CV is cut from it, and it is the only source of facts. */
+export const CV_PATH = "data/private/cv-master.json";
 
 export const loadPreferences = (path = PREFS_PATH): Preferences | null => (existsSync(path) ? Preferences.parse(JSON.parse(readFileSync(path, "utf8"))) : null);
 
-export function loadCandidate(cvPath = "data/private/cv-master.json", prefsPath = PREFS_PATH): Candidate {
+export function loadCandidate(cvPath = CV_PATH, prefsPath = PREFS_PATH): Candidate {
   const cv = Cv.parse(JSON.parse(readFileSync(cvPath, "utf8")));
   const prefs = Preferences.parse(JSON.parse(readFileSync(prefsPath, "utf8")));
   const plain = (s: string) => s.replace(/\*\*/g, "");

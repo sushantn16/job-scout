@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ago, duration, post, usePoll, type JobRow, type Summary } from "./api";
 import { AddJob } from "./AddJob";
 import { Board } from "./Board";
+import { CvEditor } from "./CvEditor";
 import { Inbox } from "./Inbox";
 import { JobDetail } from "./JobDetail";
 import { AllJobs } from "./Jobs";
@@ -9,13 +10,14 @@ import { Pipeline } from "./Pipeline";
 import { Preferences } from "./Preferences";
 import { Banner, Button, RunPill, useNotice } from "./ui";
 
-type View = "board" | "jobs" | "inbox" | "pipeline" | "preferences";
+type View = "board" | "jobs" | "inbox" | "pipeline" | "cv" | "preferences";
 type Route = { view: View } | { view: "job"; id: string };
 const VIEWS: { view: View; label: string; hash: string }[] = [
   { view: "board", label: "Board", hash: "#/" },
   { view: "jobs", label: "All jobs", hash: "#/jobs" },
   { view: "inbox", label: "Inbox", hash: "#/inbox" },
   { view: "pipeline", label: "Pipeline", hash: "#/pipeline" },
+  { view: "cv", label: "CV", hash: "#/cv" },
   { view: "preferences", label: "Preferences", hash: "#/preferences" },
 ];
 // The board lives at "#/"; the runs list moved into Pipeline.
@@ -106,6 +108,7 @@ export function App() {
       {route.view === "jobs" ? <AllJobs jobs={jobs.data ?? []} open={open} /> : null}
       {route.view === "inbox" ? <Inbox /> : null}
       {route.view === "pipeline" ? <Pipeline runs={s?.runs ?? []} running={running} start={start} /> : null}
+      {route.view === "cv" ? <CvEditor notify={notify} /> : null}
       {route.view === "preferences" ? <Preferences notify={notify} running={running} /> : null}
       {route.view === "job" ? <JobDetail key={route.id} id={route.id} back={() => go(from.current)} notify={notify} /> : null}
 

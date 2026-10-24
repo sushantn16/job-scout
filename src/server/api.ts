@@ -3,7 +3,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { json, readBody, type Route } from "./http.ts";
+import { cvRoutes } from "./cv.ts";
 import { loadConfig, Search, SEARCH_PATH, type Config } from "../config.ts";
 import { writeJson } from "../files.ts";
 import { loadPreferences, Preferences, PREFS_PATH } from "../vet/candidate.ts";
@@ -19,21 +20,6 @@ import { screen } from "../filter/rules.ts";
 import { boardOf, fromBoard, pasted } from "../sources/manual.ts";
 import type { Posting } from "../sources/types.ts";
 
-type Handler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>, query: URLSearchParams) => Promise<void> | void;
-
-const json = (res: ServerResponse, status: number, body: unknown) => {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  res.end(JSON.stringify(body));
-};
-
-const readBody = async (req: IncomingMessage, max = 10_000): Promise<unknown> => {
-  let raw = "";
-  for await (const chunk of req) {
-    raw += chunk;
-    if (raw.length > max) throw new Error("body too large");
-  }
-  return raw ? JSON.parse(raw) : {};
-};
 
 const parse = <T>(s: string | null): T | null => (s ? (JSON.parse(s) as T) : null);
 
@@ -57,7 +43,7 @@ const ACTIONS = ["scan", "vet", "tailor", "inbox", "rescreen"] as const;
 
 const problems = (e: { issues: { path: PropertyKey[]; message: string }[] }) => e.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; ");
 
-export function routes(store: Store, cfg: Config, repoDir: string): [string, RegExp, Handler][] {
+export function routes(store: Store, cfg: Config, repoDir: string): Route[] {
   const db = store.db;
   const price = (model: string) => cfg.pricing[model] ?? cfg.pricing.default!;
   const cost = (rows: Usage[]) => costOf(price, rows);
@@ -80,6 +66,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     sum(cache_write_tokens) AS cacheWrite FROM llm_calls`;
 
   return [
+    ...cvRoutes(),
     ["GET", /^\/api\/summary$/, (_req, res) => {
       store.failStaleRuns(2);
       const runs = (db.prepare("SELECT * FROM runs ORDER BY id DESC LIMIT 15").all() as { id: number; stats: string | null }[]).map((r) => ({

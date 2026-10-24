@@ -13,7 +13,7 @@ import type { Posting } from "../sources/types.ts";
 import { renderOnePage } from "../tailor/fit.ts";
 import { applicationDir, toStored, writeApplication } from "../tailor/output.ts";
 import { tailor } from "../tailor/tailor.ts";
-import type { Candidate } from "../vet/candidate.ts";
+import { CV_PATH, type Candidate } from "../vet/candidate.ts";
 import type { VetResult } from "../vet/vet.ts";
 
 export interface TailorJob {
@@ -39,7 +39,7 @@ export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candi
   const tailored = await tailor({ candidate, vet, company, jobTitle: p.title, companyName }, record);
   const dir = applicationDir(companyName, p.title);
   const cvFile = join(dir, `${candidate.cv.basics.name} CV - ${companyName}.pdf`);
-  const photo = candidate.cv.basics.photo ? resolve(dirname("data/private/cv-master.json"), candidate.cv.basics.photo) : undefined;
+  const photo = candidate.cv.basics.photo ? resolve(dirname(CV_PATH), candidate.cv.basics.photo) : undefined;
   mkdirSync(dir, { recursive: true });
   const fitted = await renderOnePage(tailored.cv, photo, cvFile, candidate.cv);
   writeApplication({ dir, cvFile: basename(cvFile), posting: p, companyName, master: candidate.cv, tailored, finalCv: fitted.cv, dropped: fitted.dropped, added: fitted.added, vet, screen: job.screen, company });

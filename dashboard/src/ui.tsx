@@ -172,3 +172,25 @@ export function Copy({ text }: { text: string }) {
     </div>
   );
 }
+
+export const input = "w-full rounded-md border border-line bg-raised px-2 py-1.5 text-ink";
+export const mono = `${input} font-mono text-[12.5px]`;
+
+export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <label className={cx("grid content-start gap-1", className)}>
+      <span className="text-[13px] font-semibold text-ink-2">{label}</span>
+      {children}
+      {hint ? <span className="text-xs text-muted">{hint}</span> : null}
+    </label>
+  );
+}
+
+/** A textarea that edits a list as one item per line, keeping blank lines while you type. */
+export function LinesField({ label, hint, value, onChange, rows = 4, monospace }: { label: string; hint?: ReactNode; value: string; onChange: (v: string) => void; rows?: number; monospace?: boolean }) {
+  return (
+    <Field label={label} hint={hint}>
+      <textarea className={monospace ? mono : input} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={!monospace} />
+    </Field>
+  );
+}
