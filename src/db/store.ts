@@ -233,11 +233,12 @@ export class Store {
     return row?.v ? (JSON.parse(row.v) as T) : null;
   }
 
-  /** Jobs vetted "apply" and not yet tailored, best score first. */
-  tailorQueue(limit: number): string[] {
+  /** Jobs vetted "apply" and not yet tailored, best score first. `only` limits it to those IDs. */
+  tailorQueue(limit: number, only?: string[]): string[] {
+    const where = only?.length ? `AND id IN (${only.map(() => "?").join(",")})` : "";
     return (this.db.prepare(
-      "SELECT id FROM jobs WHERE status = 'apply' ORDER BY coalesce(json_extract(vet, '$.fitScore'), 0) DESC LIMIT ?",
-    ).all(limit) as { id: string }[]).map((r) => r.id);
+      `SELECT id FROM jobs WHERE status = 'apply' ${where} ORDER BY coalesce(json_extract(vet, '$.fitScore'), 0) DESC LIMIT ?`,
+    ).all(...(only ?? []), limit) as { id: string }[]).map((r) => r.id);
   }
 
   setCompanyKey(id: string, key: string): void {

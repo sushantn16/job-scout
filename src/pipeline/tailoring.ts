@@ -48,8 +48,8 @@ export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candi
   return { id: job.id, dir: toStored(dir), needsEdit: tailored.needsEdit.length, reverted: tailored.reverted.length, dropped: fitted.dropped.length };
 }
 
-export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate): Promise<TailorOutcome[]> {
-  const ids = store.tailorQueue(cfg.caps.tailorPerRun);
+export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate, only?: string[]): Promise<TailorOutcome[]> {
+  const ids = store.tailorQueue(cfg.caps.tailorPerRun, only);
   store.event(runId, "tailor", `${ids.length} job(s) to tailor`);
   return mapLimit(ids, 2, async (id) => {
     const posting = store.posting(id);

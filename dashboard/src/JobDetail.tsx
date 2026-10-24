@@ -113,14 +113,14 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
           {(NEXT[job.status] ?? []).map((a) => (
             <Button key={a.to} variant={a.primary ? "primary" : "default"} disabled={busy} onClick={() => setStatus(a.to)}>{a.label}</Button>
           ))}
-          {job.status === "apply" ? <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/tailor"), "Tailoring started")}>Tailor now</Button> : null}
+          {job.status === "apply" ? <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/tailor", { ids: [id] }), "Tailoring started")}>Tailor now</Button> : null}
           {job.status === "applied" ? (
             <Button disabled={busy} onClick={() => act(() => post(`/api/jobs/${id}/followed-up`), "Noted. The follow-up reminder starts again today")} title="Record that you chased this application up">
               Followed up
             </Button>
           ) : null}
           {job.status === "new" ? (
-            <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/vet"), "Scoring the queue; this page updates when it's done")}>Score now</Button>
+            <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/vet", { ids: [id] }), "Scoring it; this page updates when it's done")}>Score now</Button>
           ) : (
             <Button variant="ghost" disabled={busy} onClick={() => setStatus("new")} title="Queue it to be screened and scored again">Re-vet</Button>
           )}

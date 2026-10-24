@@ -254,10 +254,14 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       json(res, 200, { ok: true });
     }],
 
-    ["POST", /^\/api\/actions\/(?<name>scan|vet|tailor|inbox|rescreen)$/, (_req, res, p) => {
-      if (busy()) return json(res, 409, { error: "a run is already in progress" });
+    // `ids` (vet and tailor only) limits the run to those jobs, for the buttons on a job's page.
+    ["POST", /^\/api\/actions\/(?<name>scan|vet|tailor|inbox|rescreen)$/, async (req, res, p) => {
+      const { ids = [] } = (await readBody(req)) as { ids?: unknown };
       const name = p.name as (typeof ACTIONS)[number];
-      json(res, 202, { started: name, pid: launch([name]) });
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string" && /^[0-9a-f]{16}$/.test(id)) || (ids.length && name !== "vet" && name !== "tailor"))
+        return json(res, 400, { error: "ids must be job ids, and only for vet or tailor" });
+      if (busy()) return json(res, 409, { error: "a run is already in progress" });
+      json(res, 202, { started: name, pid: launch([name, ...ids]) });
     }],
 
     ["GET", /^\/api\/pipeline(?:\/(?<id>\d+))?$/, (_req, res, p) => {
