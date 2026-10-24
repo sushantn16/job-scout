@@ -9,7 +9,7 @@ const GROUPS: { id: string; label: string; statuses: Status[] | null }[] = [
   { id: "active", label: "Active", statuses: ["needs_review", "apply", "cv_ready", "applied", "interview"] },
   { id: "maybe", label: "Maybe", statuses: ["maybe"] },
   { id: "skip", label: "Skipped", statuses: ["skip"] },
-  { id: "queued", label: "Queued", statuses: ["new", "screened"] },
+  { id: "queued", label: "Queued", statuses: ["new"] },
   { id: "filtered", label: "Filtered out", statuses: ["filtered"] },
   { id: "stale", label: "Older", statuses: ["stale"] },
   { id: "closed", label: "Closed", statuses: ["rejected", "dismissed"] },

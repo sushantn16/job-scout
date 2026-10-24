@@ -18,7 +18,6 @@ export function Pill({ tone = "neutral", children, pulse }: { tone?: Tone; child
 
 const STATUS: Record<Status, { label: string; tone: Tone }> = {
   new: { label: "Queued", tone: "info" },
-  screened: { label: "Screened", tone: "info" },
   needs_review: { label: "Needs review", tone: "warning" },
   apply: { label: "Apply", tone: "good" },
   cv_ready: { label: "CV ready", tone: "good" },

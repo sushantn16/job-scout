@@ -32,8 +32,3 @@ export const posting = (p: Partial<Posting> & Pick<Posting, "source" | "company"
   ...p,
   title: p.title.trim(),
 });
-
-export interface SourceResult {
-  postings: Posting[];
-  errors: string[];
-}

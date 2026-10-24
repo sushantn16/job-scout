@@ -5,14 +5,14 @@ import { Store } from "../db/store.ts";
 import { isFresh } from "../filter/freshness.ts";
 import { screen } from "../filter/rules.ts";
 import { statusFor, type JobStatus } from "../db/store.ts";
+import { JOB_STATUSES } from "../shared/status.ts";
 
 const cfg = loadConfig();
 const store = new Store();
 const UNSCORED: JobStatus[] = ["new", "filtered", "stale"];
-const ALL: JobStatus[] = [...UNSCORED, "screened", "needs_review", "apply", "maybe", "skip", "cv_ready", "applied", "interview", "rejected", "dismissed"];
 let changed = 0;
 let refreshed = 0;
-for (const { id, status: before, firstRun, manual, posting } of store.postings(ALL)) {
+for (const { id, status: before, firstRun, manual, posting } of store.postings([...JOB_STATUSES])) {
   const s = screen(posting, cfg);
   // Scored jobs keep their status; only what the rules read is refreshed (e.g. a recruiter badge).
   // A job you added by hand stays queued whatever the rules say: you chose it.
