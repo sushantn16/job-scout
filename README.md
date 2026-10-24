@@ -150,6 +150,7 @@ cp config/preferences.example.json data/private/preferences.json
   - Mark emphasis with `**double asterisks**`.
   - `basics.headlines` lists the titles the tailor may choose from.
   - `basics.photo` is optional: a path relative to the file.
+  - `projects` is optional: each has a `name`, an optional `stack` and `url`, and a `text`. Tailoring keeps them as they are.
   - The schema is in `src/cv/schema.ts`.
 - **`preferences.json`** tells the scorer what you're after: roles, languages, location, pay, culture and known gaps.
 

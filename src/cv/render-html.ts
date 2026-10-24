@@ -67,7 +67,8 @@ h2 { font-size: 12.2pt; font-weight: 700; color: #111; border-bottom: 1.4px soli
 /* Custom markers (native ones shrink to faint dots at small indents). No positioning: positioned
    boxes are painted in a later layer, which scrambles the PDF text order that ATS parsers read. */
 ul { list-style: none; padding-left: 6mm; }
-ul.skills { padding-left: 3.2mm; }
+ul.skills, ul.projects { padding-left: 3.2mm; }
+.projects a { color: inherit; text-decoration: none; }
 li { margin-bottom: 0.1mm; }
 li::before { content: "•"; display: inline-block; width: 2.6mm; margin-left: -2.6mm; color: #111; }
 strong { font-weight: 700; color: #111; }
@@ -89,6 +90,15 @@ export function renderCvHtml(cv: Cv, photoPath?: string): string {
 </div>`,
     )
     .join("\n");
+  const projects = cv.projects?.length
+    ? `<section><h2>Projects</h2><ul class="projects">${cv.projects
+        .map((p) => {
+          const name = `<strong>${escape(p.name)}</strong>`;
+          const stack = p.stack ? ` (${escape(p.stack)})` : "";
+          return `<li>${p.url ? `<a href="${escape(withScheme(p.url))}">${name}</a>` : name}${stack}: ${rich(p.text)}</li>`;
+        })
+        .join("")}</ul></section>`
+    : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escape(basics.name)} CV</title>
 <style>${CSS()}</style></head>
 <body>
@@ -104,6 +114,7 @@ export function renderCvHtml(cv: Cv, photoPath?: string): string {
     .map((s) => `<li><strong>${escape(s.label)}:</strong> ${escape(s.items.join(", "))}</li>`)
     .join("")}</ul></section>
 <section><h2>Work Experience</h2>${roles}</section>
+${projects}
 <section class="edu"><h2>Education</h2>${cv.education
     .map(
       (e) =>
