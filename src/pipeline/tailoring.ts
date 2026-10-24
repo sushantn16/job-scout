@@ -57,7 +57,7 @@ export async function processTailoring(store: Store, cfg: Config, runId: number,
     if (!posting || !vet) return { id, needsEdit: 0, reverted: 0, dropped: 0, error: "missing posting or vet result" };
     try {
       const out = await tailorOne({ id, posting, vet, screen: store.stage<ScreenResult>(id, "screen") }, store, cfg, candidate, (r) => store.recordCall(runId, id, r));
-      store.setStatus(id, "cv_ready");
+      store.setStatus(id, "cv_ready", "apply");
       store.event(runId, "tailor", `cv ready: ${out.dir}${out.needsEdit ? ` (${out.needsEdit} claim(s) need an edit)` : ""}`, out.needsEdit ? "warn" : "info", id);
       const form = await formOne(id, store, cfg, candidate, (r) => store.recordCall(runId, id, r)).catch((e: Error) => ({ error: e.message }));
       store.event(runId, "form", formSummary(form), "error" in form ? "warn" : "info", id);

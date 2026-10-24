@@ -32,6 +32,8 @@ export function Log({ run }: { run: Run }) {
         if (!live || !e.length) return;
         after.current = e[e.length - 1]!.id;
         setEvents((prev) => [...prev, ...e]);
+        // The API sends 500 at a time; a finished run isn't polled, so fetch the rest now.
+        if (e.length === 500) load();
       });
     load();
     const t = run.status === "running" ? setInterval(load, 2000) : undefined;

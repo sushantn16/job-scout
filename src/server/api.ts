@@ -1,6 +1,6 @@
 // Read-mostly JSON API over the SQLite store for the dashboard. Writes are limited to job status changes, saved form
 // answers, jobs you add by hand, and starting pipeline commands.
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -64,11 +64,18 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       const p = price(r.model);
       return sum + (r.input * p.input + r.output * p.output + r.cacheRead * p.cacheRead + r.cacheWrite * p.cacheWrite) / 1e6;
     }, 0);
-  // Pipeline commands run detached, one at a time; a "running" row older than two hours is taken to be a crashed run.
-  const busy = () => Boolean(db.prepare("SELECT id FROM runs WHERE status = 'running' AND started_at > ?").get(new Date(Date.now() - 2 * 3_600_000).toISOString()));
+  // Pipeline commands run detached, one at a time. The child itself counts as busy from the moment it's spawned, before
+  // it has written its run row (a double click would otherwise start two); a run row counts for runs started elsewhere.
+  let child: ChildProcess | null = null;
+  const busy = () => {
+    store.failStaleRuns(2);
+    return Boolean((child && child.exitCode === null && child.signalCode === null) || db.prepare("SELECT id FROM runs WHERE status = 'running'").get());
+  };
   const launch = (args: string[]) => {
     // Runs started here notify when they finish (or need an AWS login), since you may not be watching the page.
-    const child = spawn("pnpm", ["-s", ...args], { cwd: repoDir, detached: true, stdio: "ignore", env: { ...process.env, JOB_SCOUT_NOTIFY: "1" } });
+    child = spawn("pnpm", ["-s", ...args], { cwd: repoDir, detached: true, stdio: "ignore", env: { ...process.env, JOB_SCOUT_NOTIFY: "1" } });
+    // Without a listener, a failed spawn (pnpm not on PATH) would be thrown and take the server down.
+    child.on("error", (e) => console.error(`could not start ${args.join(" ")}: ${e.message}`));
     child.unref();
     return child.pid;
   };
@@ -77,6 +84,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
 
   return [
     ["GET", /^\/api\/summary$/, (_req, res) => {
+      store.failStaleRuns(2);
       const runs = (db.prepare("SELECT * FROM runs ORDER BY id DESC LIMIT 15").all() as { id: number; stats: string | null }[]).map((r) => ({
         ...r,
         stats: parse(r.stats),
@@ -100,6 +108,7 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     }],
 
     ["GET", /^\/api\/runs\/(?<id>\d+)\/events$/, (_req, res, p, q) => {
+      // dashboard/src/Runs.tsx asks for more while a page comes back full.
       json(res, 200, db.prepare("SELECT * FROM events WHERE run_id = ? AND id > ? ORDER BY id LIMIT 500").all(Number(p.id), Number(q.get("after") ?? 0)));
     }],
 
@@ -185,16 +194,15 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     ["POST", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/status$/, async (req, res, p) => {
       const { status } = (await readBody(req)) as { status?: JobStatus };
       if (!status || !SETTABLE.includes(status)) return json(res, 400, { error: `status must be one of ${SETTABLE.join(", ")}` });
-      const row = db.prepare("SELECT status FROM jobs WHERE id = ?").get(p.id!) as { status: string } | undefined;
-      if (!row) return json(res, 404, { error: "no such job" });
+      const from = store.status(p.id!);
+      if (!from) return json(res, 404, { error: "no such job" });
       store.setStatus(p.id!, status);
-      store.event(store.latestRunId(), "dashboard", `status ${row.status} → ${status}`, "info", p.id!);
-      json(res, 200, { id: p.id, from: row.status, to: status });
+      store.event(store.latestRunId(), "dashboard", `status ${from} → ${status}`, "info", p.id!);
+      json(res, 200, { id: p.id, from, to: status });
     }],
 
     ["POST", /^\/api\/jobs\/(?<id>[0-9a-f]{16})\/followed-up$/, (_req, res, p) => {
-      const row = db.prepare("SELECT status FROM jobs WHERE id = ?").get(p.id!) as { status: string } | undefined;
-      if (row?.status !== "applied") return json(res, 400, { error: "only an application waiting for a reply can be followed up" });
+      if (store.status(p.id!) !== "applied") return json(res, 400, { error: "only an application waiting for a reply can be followed up" });
       store.markFollowedUp(p.id!);
       store.event(store.latestRunId(), "dashboard", "followed up", "info", p.id!);
       json(res, 200, { ok: true });
@@ -205,9 +213,8 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
       const { url } = (await readBody(req)) as { url?: string };
       if (url !== undefined && (typeof url !== "string" || !/^https?:\/\/[^\s]+$/.test(url.trim()))) return json(res, 400, { error: "the form URL must start with http:// or https://" });
       if (!db.prepare("SELECT id FROM jobs WHERE id = ? AND vet IS NOT NULL").get(p.id!)) return json(res, 404, { error: "no vetted job with this id" });
-      const child = spawn("pnpm", ["-s", "form", p.id!, ...(url ? [url.trim()] : [])], { cwd: repoDir, detached: true, stdio: "ignore" });
-      child.unref();
-      json(res, 202, { started: "form", pid: child.pid });
+      if (busy()) return json(res, 409, { error: "a run is already in progress" });
+      json(res, 202, { started: "form", pid: launch(["form", p.id!, ...(url ? [url.trim()] : [])]) });
     }],
 
     ["POST", /^\/api\/answers$/, async (req, res) => {
@@ -279,8 +286,8 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     ["POST", /^\/api\/inbox\/(?<id>\d+)\/undo$/, (_req, res, p) => {
       const e = db.prepare("SELECT job_id, from_status, to_status, undone FROM emails WHERE id = ?").get(Number(p.id)) as { job_id: string | null; from_status: string | null; to_status: string | null; undone: number } | undefined;
       if (!e?.job_id || !e.to_status || e.undone) return json(res, 400, { error: "nothing to undo" });
-      const job = db.prepare("SELECT status FROM jobs WHERE id = ?").get(e.job_id) as { status: string };
-      if (job.status !== e.to_status) return json(res, 409, { error: `the job has since moved to ${job.status}` });
+      const now = store.status(e.job_id);
+      if (now !== e.to_status) return json(res, 409, { error: `the job has since moved to ${now ?? "nowhere (deleted)"}` });
       store.setStatus(e.job_id, e.from_status as JobStatus);
       db.prepare("UPDATE emails SET undone = 1 WHERE id = ?").run(Number(p.id));
       store.event(store.latestRunId(), "dashboard", `undid email status change ${e.to_status} → ${e.from_status}`, "info", e.job_id);
@@ -291,12 +298,19 @@ export function routes(store: Store, cfg: Config, repoDir: string): [string, Reg
     ["POST", /^\/api\/inbox\/(?<id>\d+)\/resolve$/, async (req, res, p) => {
       const { jobId, kind } = (await readBody(req)) as { jobId?: string; kind?: string };
       if (!kind || !["confirmation", "rejection", "interview", "ignored"].includes(kind)) return json(res, 400, { error: "kind must be confirmation, rejection, interview or ignored" });
-      const job = jobId ? (db.prepare("SELECT status FROM jobs WHERE id = ?").get(jobId) as { status: string } | undefined) : undefined;
-      if (jobId && !job) return json(res, 404, { error: "no such job" });
-      const next = job && kind !== "ignored" ? nextStatus(kind as EmailKind, job.status) : null;
-      if (next) store.setStatus(jobId!, next as JobStatus);
+      const email = db.prepare("SELECT to_status, undone FROM emails WHERE id = ?").get(Number(p.id)) as { to_status: string | null; undone: number } | undefined;
+      if (!email) return json(res, 404, { error: "no such email" });
+      // Re-resolving would overwrite the change it already made, and with it the way to undo that change.
+      if (email.to_status && !email.undone) return json(res, 409, { error: "this email already moved its job; undo that first" });
+      const current = jobId ? store.status(jobId) : null;
+      if (jobId && !current) return json(res, 404, { error: "no such job" });
+      const next = current && kind !== "ignored" ? nextStatus(kind as EmailKind, current) : null;
+      if (next) {
+        store.setStatus(jobId!, next);
+        store.event(store.latestRunId(), "dashboard", `email set by you: ${current} → ${next} (${kind})`, "info", jobId!);
+      }
       db.prepare("UPDATE emails SET kind = ?, job_id = coalesce(?, job_id), match_reason = 'set by you', from_status = ?, to_status = ?, undone = 0 WHERE id = ?")
-        .run(kind, jobId ?? null, next ? job!.status : null, next, Number(p.id));
+        .run(kind, jobId ?? null, next ? current : null, next, Number(p.id));
       json(res, 200, { ok: true, to: next });
     }],
 

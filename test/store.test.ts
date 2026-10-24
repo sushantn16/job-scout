@@ -178,3 +178,50 @@ test("status_at: set on insert and on every status change; older databases get i
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a slow stage moves a job only if it's still where the stage found it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const store = new Store(join(dir, "test.db"));
+    const cfg = loadConfig("config/job-scout.json", null);
+    const runId = store.startRun(new Date(), "scan");
+    const text = "You will own product features end to end in TypeScript and React, with a small team in Berlin. ".repeat(2);
+    const add = (company: string) => store.upsert(runId, screen(pasted({ url: `https://careers.${company}.com/1`, company, title: "Product Engineer", location: "Berlin", description: text }), cfg), true).id;
+    const [kept, moved] = [add("keptco"), add("movedco")];
+
+    // Dismissed from the dashboard while the vetter was working: the vet result is saved, the dismissal stands.
+    store.setStatus(moved, "dismissed");
+    for (const id of [kept, moved]) store.saveStage(id, "vet", { fitScore: 90 }, { to: "apply", from: "new" });
+    assert.equal(store.status(kept), "apply");
+    assert.equal(store.status(moved), "dismissed");
+    assert.ok(store.stage(moved, "vet"), "the result is kept either way");
+
+    // Marked applied while its CV was being tailored: tailoring finishing doesn't move it back to cv_ready.
+    store.setStatus(kept, "applied");
+    store.setStatus(kept, "cv_ready", "apply");
+    assert.equal(store.status(kept), "applied");
+    assert.ok((store.db.prepare("SELECT applied_at FROM jobs WHERE id = ?").get(kept) as { applied_at: string | null }).applied_at, "applied date kept");
+    assert.equal(store.status("0000000000000000"), null);
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a run left running after a crash is closed as failed, a live one isn't", () => {
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const store = new Store(join(dir, "test.db"));
+    const crashed = store.startRun(new Date(), "vet");
+    const live = store.startRun(new Date(), "vet");
+    store.db.prepare("UPDATE runs SET started_at = ? WHERE id = ?").run(new Date(Date.now() - 3 * 3_600_000).toISOString(), crashed);
+    store.failStaleRuns(2);
+    const status = (id: number) => (store.db.prepare("SELECT status, finished_at FROM runs WHERE id = ?").get(id) as { status: string; finished_at: string | null });
+    assert.equal(status(crashed).status, "failed");
+    assert.ok(status(crashed).finished_at);
+    assert.equal(status(live).status, "running");
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

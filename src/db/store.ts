@@ -191,6 +191,16 @@ export class Store {
     this.db.prepare("UPDATE runs SET finished_at = ?, status = ?, stats = ? WHERE id = ?").run(now(), status, JSON.stringify(stats), id);
   }
 
+  /** A run still "running" after `hours` was killed (a crash, a container restart): mark it failed so it stops blocking. */
+  failStaleRuns(hours: number): void {
+    this.db.prepare("UPDATE runs SET status = 'failed', finished_at = ? WHERE status = 'running' AND started_at <= ?")
+      .run(now(), new Date(Date.now() - hours * 3_600_000).toISOString());
+  }
+
+  status(id: string): JobStatus | null {
+    return (this.db.prepare("SELECT status FROM jobs WHERE id = ?").get(id) as { status: JobStatus } | undefined)?.status ?? null;
+  }
+
   event(runId: number, stage: EventStage, message: string, level: "info" | "warn" | "error" = "info", jobId?: string): void {
     this.db.prepare("INSERT INTO events (run_id, job_id, at, level, stage, message) VALUES (?, ?, ?, ?, ?, ?)")
       .run(runId, jobId ?? null, now(), level, stage, message);
@@ -280,8 +290,9 @@ export class Store {
   /**
    * Also keeps the application's dates: applying sets `applied_at` once, the first interview or rejection sets
    * `replied_at`, and moving back before applying (an undo, a re-vet) clears them.
+   * With `from`, it changes only a job still in that status, so a slow stage can't undo a change made meanwhile.
    */
-  setStatus(id: string, status: JobStatus): void {
+  setStatus(id: string, status: JobStatus, from?: JobStatus): void {
     const sent = ["applied", "interview", "rejected"].includes(status);
     const replied = status === "interview" || status === "rejected";
     const t = now();
@@ -290,8 +301,8 @@ export class Store {
          applied_at = CASE WHEN ? THEN coalesce(applied_at, ?) END,
          replied_at = CASE WHEN ? THEN coalesce(replied_at, ?) END,
          followed_up_at = CASE WHEN ? THEN followed_up_at END
-       WHERE id = ?`,
-    ).run(status, sent ? 1 : 0, t, replied ? 1 : 0, t, sent ? 1 : 0, id);
+       WHERE id = ?${from ? " AND status = ?" : ""}`,
+    ).run(status, sent ? 1 : 0, t, replied ? 1 : 0, t, sent ? 1 : 0, id, ...(from ? [from] : []));
   }
 
   /** You chased an application up: the follow-up reminder starts again from today. */
@@ -328,8 +339,10 @@ export class Store {
   }
 
   /** Persist one stage's result on the job. */
-  saveStage(id: string, stage: "screen" | "vet" | "tailor" | "form", result: object, status?: JobStatus): void {
-    this.db.prepare(`UPDATE jobs SET ${stage} = ?${status ? ", status = ?" : ""} WHERE id = ?`).run(...(status ? [JSON.stringify(result), status, id] : [JSON.stringify(result), id]));
+  /** With `status`, the job moves only if it's still `from`: a dismissal made while the LLM was working stands. */
+  saveStage(id: string, stage: "screen" | "vet" | "tailor" | "form", result: object, status?: { to: JobStatus; from: JobStatus }): void {
+    this.db.prepare(`UPDATE jobs SET ${stage} = ?${status ? ", status = CASE WHEN status = ? THEN ? ELSE status END" : ""} WHERE id = ?`)
+      .run(...(status ? [JSON.stringify(result), status.from, status.to, id] : [JSON.stringify(result), id]));
   }
 
   stage<T>(id: string, stage: "screen" | "vet" | "tailor" | "form"): T | null {
@@ -413,7 +426,7 @@ export class Store {
   }
 
   /** Every job an email might be about: all but dismissed ones (you may apply to an older or skipped job yourself). */
-  matchableJobs(): { id: string; company: string; title: string; status: string }[] {
+  matchableJobs(): { id: string; company: string; title: string; status: JobStatus }[] {
     return this.db.prepare("SELECT id, company, title, status FROM jobs WHERE status <> 'dismissed'").all() as never;
   }
 }

@@ -62,7 +62,7 @@ export async function processQueue(store: Store, cfg: Config, runId: number, can
       store.setCompanyKey(id, companyKey(posting.company));
       const vet = await vetJob({ candidate, posting, description, signals: screen(posting, cfg).signals, company, cfg }, record);
       const status: JobStatus = screened.needsReview ? "needs_review" : vet.decision;
-      store.saveStage(id, "vet", vet, status);
+      store.saveStage(id, "vet", vet, { to: status, from: "new" });
       store.event(runId, "vet", `${vet.decision} (${vet.fitScore}): ${vet.summary}`, "info", id);
       return { id, posting, status, vet, findings: screened.findings.length };
     } catch (e) {

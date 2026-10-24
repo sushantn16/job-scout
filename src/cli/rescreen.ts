@@ -30,4 +30,7 @@ for (const { id, status: before, firstRun, manual, posting } of store.postings(A
     console.log(`${before} → ${after}: ${posting.company} | ${posting.title}${s.rejections[0] ? ` (${s.rejections[0].slice(0, 80)})` : ""}`);
   }
 }
-console.log(`${changed} job(s) changed status; signals refreshed on ${refreshed} other job(s)`);
+const summary = `${changed} job(s) changed status; signals refreshed on ${refreshed} other job(s)`;
+console.log(summary);
+// Started from the dashboard, its output goes nowhere: leave the result in the event log.
+store.event(store.latestRunId(), "dashboard", `re-checked stored jobs: ${summary}`);
