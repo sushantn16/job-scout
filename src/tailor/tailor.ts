@@ -11,7 +11,7 @@ import { check, Corpus, type Violation } from "./facts.ts";
 
 const Short = (n: number) => z.string().describe(`under ${n} characters`);
 
-const TailorOutput = z.object({
+export const TailorOutput = z.object({
   headline: z.string().describe("Exactly one of the allowed headlines"),
   profile: Short(420).describe("2-3 sentences in the CV's style (no 'I'), under 420 characters"),
   skills: z.array(z.object({ groupId: z.string(), items: z.array(z.string()) })).describe("Skill groups in the order to show, each with items in the order to show"),

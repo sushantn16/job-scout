@@ -39,7 +39,7 @@ export interface FormPrep {
   fields: PreparedField[];
 }
 
-const Draft = z.object({
+export const Draft = z.object({
   answers: z.array(
     z.object({
       id: z.string(),

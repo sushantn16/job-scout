@@ -11,7 +11,7 @@ import { loadPreferences, Preferences, PREFS_PATH } from "../vet/candidate.ts";
 import type { JobStatus, Store } from "../db/store.ts";
 import { outputRoot, resolveOutput } from "../tailor/output.ts";
 import { runPipeline } from "./pipeline.ts";
-import { costOf, type Usage } from "../llm/cost.ts";
+import { costOf, priceFor, type Usage } from "../llm/cost.ts";
 import { nextStatus, type EmailKind } from "../inbox/classify.ts";
 import { windowStart } from "../filter/freshness.ts";
 import { ANSWERS_PATH, loadAnswers, saveAnswer, STANDARD, STANDARD_KEYS, type StandardKey } from "../forms/answers.ts";
@@ -45,7 +45,7 @@ const problems = (e: { issues: { path: PropertyKey[]; message: string }[] }) => 
 
 export function routes(store: Store, cfg: Config, repoDir: string): Route[] {
   const db = store.db;
-  const price = (model: string) => cfg.pricing[model] ?? cfg.pricing.default!;
+  const price = (model: string) => priceFor(cfg.pricing, model);
   const cost = (rows: Usage[]) => costOf(price, rows);
   // Pipeline commands run detached, one at a time. The child itself counts as busy from the moment it's spawned, before
   // it has written its run row (a double click would otherwise start two); a run row counts for runs started elsewhere.

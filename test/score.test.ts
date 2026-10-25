@@ -60,3 +60,13 @@ test("employee reviews: combined by review count, and only enough poor reviews c
   assert.equal(culture([{ site: "glassdoor", rating: 2.8, reviewCount: 80 }]).points, 0);
   assert.match(culture([{ site: "glassdoor", rating: 3.2, reviewCount: 80 }]).basis, /employees rate it 3.2\/5/);
 });
+
+test("prices: a model's own entry, else the longest entry it starts with, else the default", async () => {
+  const { priceFor } = await import("../src/llm/cost.ts");
+  const p = (input: number) => ({ input, output: 0, cacheRead: 0, cacheWrite: 0 });
+  const pricing = { default: p(1), "gpt-5": p(2), "gpt-5-mini": p(3), "anthropic/claude-sonnet-4.5": p(4) };
+  assert.equal(priceFor(pricing, "gpt-5").input, 2);
+  assert.equal(priceFor(pricing, "gpt-5-mini-2025-08-07").input, 3);
+  assert.equal(priceFor(pricing, "anthropic/claude-sonnet-4.5-20250929").input, 4);
+  assert.equal(priceFor(pricing, "llama3.1:8b").input, 1);
+});
