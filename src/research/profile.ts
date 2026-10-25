@@ -7,7 +7,7 @@ import { isCompanyPage, mentions, withoutAverages } from "./reviews.ts";
 
 const Cited = z.object({ text: z.string().describe("under 300 characters"), sourceUrl: z.string() });
 
-const ProfileOutput = z.object({
+export const ProfileOutput = z.object({
   oneLiner: z.string().describe("under 200 characters").describe("What the company builds, for whom"),
   stage: z.enum(["pre-seed", "seed", "series-a", "series-b", "series-c-plus", "public", "bootstrapped", "subsidiary", "unknown"]),
   stageEvidence: Cited.nullable(),

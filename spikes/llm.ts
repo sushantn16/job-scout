@@ -1,13 +1,10 @@
-// M0 spike: one schema-validated Claude call through Bedrock, using the inference profile in .env.
-// Doubles as a first look at the injection screen: the real Kombo canary vs a benign control.
-import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+// Connection check: two small schema-validated calls through whichever provider .env configures (Bedrock or an
+// OpenAI-compatible API), with the screen role's model. Doubles as a first look at the injection screen: the real Kombo
+// canary vs a benign control.
 import { z } from "zod";
+import { modelFor, provider, structured, type CallRecord } from "../src/llm/client.ts";
 
-const model = process.env.JOB_SCOUT_MODEL;
-if (!model) throw new Error("JOB_SCOUT_MODEL is not set (see .env.example)");
-
-const client = new AnthropicBedrock({ awsRegion: process.env.AWS_REGION });
+console.log(`provider: ${provider()}, model: ${modelFor("screen")}`);
 
 const ScreenResult = z.object({
   verdict: z.enum(["clean", "suspicious", "injection"]),
@@ -35,15 +32,9 @@ const POSTINGS = {
 };
 
 for (const [name, text] of Object.entries(POSTINGS)) {
-  const started = Date.now();
-  const response = await client.messages.parse({
-    model,
-    max_tokens: 2000,
-    system: SYSTEM,
-    messages: [{ role: "user", content: `<posting>\n${text}\n</posting>` }],
-    output_config: { format: zodOutputFormat(ScreenResult) },
-  });
-  console.log(`\n## ${name} (${Date.now() - started} ms, stop=${response.stop_reason})`);
-  console.log(`usage: in=${response.usage.input_tokens} out=${response.usage.output_tokens}`);
-  console.log(JSON.stringify(response.parsed_output, null, 2));
+  let usage: CallRecord | undefined;
+  const out = await structured({ role: "screen", system: SYSTEM, input: `<posting>\n${text}\n</posting>`, schema: ScreenResult, maxTokens: 2000, onRecord: (r) => (usage = r) });
+  console.log(`\n## ${name} (${usage?.ms} ms, served by ${usage?.model})`);
+  console.log(`usage: in=${usage?.inputTokens} out=${usage?.outputTokens} cached=${usage?.cacheReadTokens}`);
+  console.log(JSON.stringify(out, null, 2));
 }

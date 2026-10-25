@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromIni } from "@aws-sdk/credential-providers";
+import { provider } from "../llm/client.ts";
 
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
@@ -51,6 +52,7 @@ const hasCli = () => new Promise<boolean>((resolve) => execFile("aws", ["--versi
  * doesn't open by itself. Without AWS_PROFILE (credentials from the environment) there is nothing to manage.
  */
 export async function ensureAwsSession(log: (line: string) => void): Promise<SessionResult> {
+  if (provider() !== "bedrock") return { ok: true, detail: "not needed: the models are reached through an OpenAI-compatible API" };
   const profile = process.env.AWS_PROFILE;
   if (!profile) return { ok: true, detail: "no AWS_PROFILE; using credentials from the environment" };
 

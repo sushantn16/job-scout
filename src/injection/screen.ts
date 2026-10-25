@@ -23,7 +23,7 @@ const LlmFinding = z.object({
   quote: z.string().describe("Exact text copied from the posting"),
   intent: z.string().describe("What the text tries to make an AI do, in one sentence"),
 });
-const ScreenOutput = z.object({ verdict: z.enum(["clean", "suspicious", "injection"]), findings: z.array(LlmFinding) });
+export const ScreenOutput = z.object({ verdict: z.enum(["clean", "suspicious", "injection"]), findings: z.array(LlmFinding) });
 
 /** Kinds that hold a job for human review. A canary alone is information for the applicant, not a threat. */
 const BLOCKING: FindingKind[] = ["ai-directed", "override", "chat-template", "invisible-unicode", "hidden-html", "screen-refused"];
