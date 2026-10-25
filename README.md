@@ -207,8 +207,8 @@ Each one turns on when its setting is in `.env` (with Docker, run `docker compos
 
 - `pnpm spike:llm` gets HTTP 401 or 404: check the key, and that the base URL ends in `/v1`.
 - Jobs fail with "output didn't match the schema": use a model with structured-output support.
-- A city you just added shows nothing: jobs posted before you added it aren't scored. Open one in **All jobs** and
-  press **Re-vet**.
+- A city or title you just added on **Preferences**: the next scan also picks up jobs there posted in the last 14
+  days. Jobs a scan already marked "older" come back with **Re-check stored jobs**.
 
 ## Commands
 

@@ -25,3 +25,13 @@ export function isFresh(posted: string, since: Date): boolean {
   const t = Date.parse(posted);
   return Number.isNaN(t) || t >= since.getTime();
 }
+
+/**
+ * The window for jobs a run hasn't stored before. Normally the run's own window, but the first scan after the filters
+ * changed looks back `maxHours`: a city or title you just added lets in jobs that were posted long before the last run,
+ * and without this they'd all count as older than the window.
+ */
+export function newJobWindow(now: Date, since: Date, lastRunStart: Date | null, filtersChangedAt: Date | null, maxHours: number): Date {
+  const widened = filtersChangedAt !== null && (lastRunStart === null || filtersChangedAt > lastRunStart);
+  return widened ? new Date(Math.min(since.getTime(), now.getTime() - maxHours * HOUR)) : since;
+}

@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { json, readBody, type Route } from "./http.ts";
 import { cvRoutes } from "./cv.ts";
-import { loadConfig, Search, SEARCH_PATH, type Config } from "../config.ts";
+import { keptBy, loadConfig, Search, SEARCH_PATH, type Config } from "../config.ts";
 import { writeJson } from "../files.ts";
 import { loadPreferences, Preferences, PREFS_PATH } from "../vet/candidate.ts";
 import type { JobStatus, Store } from "../db/store.ts";
@@ -232,6 +232,8 @@ export function routes(store: Store, cfg: Config, repoDir: string): Route[] {
       const answers = Object.entries((body.answers ?? {}) as Record<string, unknown>);
       const bad = answers.find(([k, v]) => !STANDARD_KEYS.includes(k as StandardKey) || typeof v !== "string" || v.length > 2000);
       if (bad) return json(res, 400, { error: `Form answers: "${bad[0]}" must be a known topic with text under 2,000 characters` });
+      // A change to what decides which jobs are kept makes the next scan look further back for jobs it lets in.
+      if (keptBy(search.data) !== keptBy(cfg)) store.setMeta("filtersChangedAt", new Date().toISOString());
       writeJson(SEARCH_PATH, search.data);
       writeJson(PREFS_PATH, prefs.data);
       writeJson(ANSWERS_PATH, Object.fromEntries(answers.map(([k, v]) => [k, (v as string).trim()]).filter(([, v]) => v)));

@@ -110,7 +110,8 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
 
       <Card title="Where you'd work" aside={<span className="text-xs font-normal text-muted">Search filter</span>}>
         <p className="mb-3 mt-0 text-[13px] text-ink-2">
-          A job is kept when its location matches one of these. Add every city you'd move to. LinkedIn still searches around{" "}
+          A job is kept when its location matches one of these. Add every city you'd move to; the next run also picks up jobs
+          there posted in the last 14 days. LinkedIn still searches around{" "}
           <strong>{loaded.linkedinLocation}</strong> (set in the config file); company boards and HN are searched everywhere.
         </p>
         <ul className="m-0 mb-3 grid list-none gap-1.5 p-0">

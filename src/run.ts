@@ -1,7 +1,7 @@
 // Daily pipeline entry point. M1: fetch, filter, store, digest. LLM stages are added in M2/M3.
 import { loadConfig } from "./config.ts";
 import { Store } from "./db/store.ts";
-import { isFresh, windowStart } from "./filter/freshness.ts";
+import { isFresh, newJobWindow, windowStart } from "./filter/freshness.ts";
 import { isRelevant, screen, type Screened } from "./filter/rules.ts";
 import { mapLimit } from "./http.ts";
 import { ATS, type AtsKind } from "./sources/ats.ts";
@@ -31,8 +31,12 @@ async function loadLinkedIn(): Promise<LinkedInModule | null> {
 const cfg = loadConfig();
 const store = new Store();
 const started = new Date();
-const since = windowStart(started, store.lastSuccessfulRunStart(), cfg.freshness.minHours, cfg.freshness.maxHours);
-const runId = store.startRun(since);
+const lastRun = store.lastSuccessfulRunStart();
+const since = windowStart(started, lastRun, cfg.freshness.minHours, cfg.freshness.maxHours);
+// Jobs not stored before are judged against this; it's wider than `since` on the first scan after the filters changed.
+const newSince = newJobWindow(started, since, lastRun, store.filtersChangedAt(), cfg.freshness.maxHours);
+// The run records the window it applied to new jobs, so re-screening them later judges them the same way.
+const runId = store.startRun(newSince);
 const log = (stage: EventStage, msg: string, level: "info" | "warn" | "error" = "info") => {
   store.event(runId, stage, msg, level);
   if (level !== "info") console.error(`[${stage}] ${msg}`);
@@ -52,6 +56,7 @@ const inbox = processInbox(store, cfg, runId).catch((e: Error) => (log("inbox", 
 
 try {
   log("run", `freshness window starts ${since.toISOString()}`);
+  if (newSince < since) log("run", `the search filters changed since the last run: jobs not seen before count back to ${newSince.toISOString()}`);
   const expired = store.expireMaybes(cfg.maybeDays);
   for (const j of expired) store.event(runId, "vet", `no decision in ${cfg.maybeDays} days: maybe → skip`, "info", j.id);
   if (expired.length) log("vet", `${expired.length} job(s) left in maybe for ${cfg.maybeDays}+ days moved to skip`);
@@ -106,7 +111,7 @@ try {
   let stale = 0;
   for (const p of relevant) {
     const s = screen(p, cfg);
-    const recent = isFresh(p.posted, since);
+    const recent = isFresh(p.posted, newSince);
     // One posting that can't be stored must not cost the whole run (run 29 failed on a renamed job).
     let stored: { isNew: boolean; id: string };
     try {

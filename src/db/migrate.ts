@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS events (
   stage TEXT NOT NULL,
   message TEXT NOT NULL
 );
+-- Small facts about the database itself, e.g. when the search filters last changed (filtersChangedAt).
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 export function migrate(db: DatabaseSync): void {
