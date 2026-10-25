@@ -47,6 +47,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
     res.end(readFileSync(file));
   } catch (e) {
+    // Once a response has started (a PDF being sent), a 500 can't be written; writing one would throw and end the server.
+    if (res.headersSent) return res.destroy();
     res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: (e as Error).message }));
   }

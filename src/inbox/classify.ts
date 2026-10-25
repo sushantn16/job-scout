@@ -1,4 +1,5 @@
 // Rules-only classification of application emails, and matching them to stored jobs. No LLM ever reads an email.
+import type { JobStatus } from "../db/store.ts";
 
 export type EmailKind = "rejection" | "interview" | "confirmation" | "unclear";
 
@@ -27,7 +28,7 @@ export interface MatchJob {
   company: string;
   companyName: string;
   title: string;
-  status: string;
+  status: JobStatus;
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -55,8 +56,9 @@ export function matchJob(email: { from: string; subject: string; text: string },
 }
 
 /** The status an email moves a job to, or null if it shouldn't change it (e.g. a late confirmation after an interview). */
-export function nextStatus(kind: EmailKind, current: string): string | null {
-  if (kind === "rejection") return current === "rejected" ? null : "rejected";
+export function nextStatus(kind: EmailKind, current: JobStatus): JobStatus | null {
+  // Only a job you could have applied to: a rejection matched to a filtered or skipped job would invent an application.
+  if (kind === "rejection") return ["cv_ready", "apply", "applied", "interview", "maybe", "needs_review", "new"].includes(current) ? "rejected" : null;
   if (kind === "interview") return ["cv_ready", "apply", "applied", "maybe", "needs_review"].includes(current) ? "interview" : null;
   if (kind === "confirmation") return ["cv_ready", "apply", "maybe", "needs_review", "new"].includes(current) ? "applied" : null;
   return null;

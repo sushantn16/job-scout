@@ -113,14 +113,14 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
           {(NEXT[job.status] ?? []).map((a) => (
             <Button key={a.to} variant={a.primary ? "primary" : "default"} disabled={busy} onClick={() => setStatus(a.to)}>{a.label}</Button>
           ))}
-          {job.status === "apply" ? <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/tailor"), "Tailoring started")}>Tailor now</Button> : null}
+          {job.status === "apply" ? <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/tailor", { ids: [id] }), "Tailoring started")}>Tailor now</Button> : null}
           {job.status === "applied" ? (
             <Button disabled={busy} onClick={() => act(() => post(`/api/jobs/${id}/followed-up`), "Noted. The follow-up reminder starts again today")} title="Record that you chased this application up">
               Followed up
             </Button>
           ) : null}
           {job.status === "new" ? (
-            <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/vet"), "Scoring the queue; this page updates when it's done")}>Score now</Button>
+            <Button variant="primary" disabled={busy} onClick={() => act(() => post("/api/actions/vet", { ids: [id] }), "Scoring it; this page updates when it's done")}>Score now</Button>
           ) : (
             <Button variant="ghost" disabled={busy} onClick={() => setStatus("new")} title="Queue it to be screened and scored again">Re-vet</Button>
           )}
@@ -207,7 +207,10 @@ export function JobDetail({ id, back, notify }: { id: string; back: () => void; 
                   ["Size", c.size ?? "unknown"],
                   ["Language", c.workingLanguage],
                   ["Website", c.website ? <a href={c.website} target="_blank" rel="noreferrer">{c.website}</a> : "not found"],
-                  ["Reviews", <><a href={c.reviewLinks.glassdoor} target="_blank" rel="noreferrer">Glassdoor</a> · <a href={c.reviewLinks.kununu} target="_blank" rel="noreferrer">kununu</a></>],
+                  ["Reviews", <>{(["glassdoor", "kununu"] as const).map((site, i) => {
+                    const r = c.employeeReviews?.find((x) => x.site === site);
+                    return <span key={site}>{i ? " · " : ""}<a href={r?.sourceUrl ?? c.reviewLinks[site]} target="_blank" rel="noreferrer">{site === "kununu" ? "kununu" : "Glassdoor"}</a>{r ? ` ${r.rating}/5${r.reviewCount ? ` (${r.reviewCount} reviews)` : ""}` : ""}</span>;
+                  })}</>],
                 ]}
               />
               <p className="my-3">{c.outlook}</p>

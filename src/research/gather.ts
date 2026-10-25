@@ -2,10 +2,11 @@
 import { getJson, getText } from "../http.ts";
 import { stripInvisible } from "../injection/scan.ts";
 import { decodeEntities, htmlToText } from "../text.ts";
+import { reviewSources } from "./reviews.ts";
 
 export interface ResearchSource {
   url: string;
-  kind: "website" | "page" | "news" | "hn" | "github" | "posting";
+  kind: "website" | "page" | "news" | "hn" | "github" | "posting" | "reviews";
   title: string;
   text: string;
   date?: string;
@@ -142,5 +143,6 @@ export async function gather(company: { name: string; slug?: string; postingText
   } catch (e) {
     errors.push(`hn: ${(e as Error).message}`);
   }
+  sources.push(...(await reviewSources(company.name, errors)));
   return { website: site, sources, errors };
 }

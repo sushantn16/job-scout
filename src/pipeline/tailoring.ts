@@ -13,7 +13,7 @@ import type { Posting } from "../sources/types.ts";
 import { renderOnePage } from "../tailor/fit.ts";
 import { applicationDir, toStored, writeApplication } from "../tailor/output.ts";
 import { tailor } from "../tailor/tailor.ts";
-import type { Candidate } from "../vet/candidate.ts";
+import { CV_PATH, type Candidate } from "../vet/candidate.ts";
 import type { VetResult } from "../vet/vet.ts";
 
 export interface TailorJob {
@@ -39,7 +39,7 @@ export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candi
   const tailored = await tailor({ candidate, vet, company, jobTitle: p.title, companyName }, record);
   const dir = applicationDir(companyName, p.title);
   const cvFile = join(dir, `${candidate.cv.basics.name} CV - ${companyName}.pdf`);
-  const photo = candidate.cv.basics.photo ? resolve(dirname("data/private/cv-master.json"), candidate.cv.basics.photo) : undefined;
+  const photo = candidate.cv.basics.photo ? resolve(dirname(CV_PATH), candidate.cv.basics.photo) : undefined;
   mkdirSync(dir, { recursive: true });
   const fitted = await renderOnePage(tailored.cv, photo, cvFile, candidate.cv);
   writeApplication({ dir, cvFile: basename(cvFile), posting: p, companyName, master: candidate.cv, tailored, finalCv: fitted.cv, dropped: fitted.dropped, added: fitted.added, vet, screen: job.screen, company });
@@ -48,8 +48,8 @@ export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candi
   return { id: job.id, dir: toStored(dir), needsEdit: tailored.needsEdit.length, reverted: tailored.reverted.length, dropped: fitted.dropped.length };
 }
 
-export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate): Promise<TailorOutcome[]> {
-  const ids = store.tailorQueue(cfg.caps.tailorPerRun);
+export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate, only?: string[]): Promise<TailorOutcome[]> {
+  const ids = store.tailorQueue(cfg.caps.tailorPerRun, only);
   store.event(runId, "tailor", `${ids.length} job(s) to tailor`);
   return mapLimit(ids, 2, async (id) => {
     const posting = store.posting(id);
@@ -57,7 +57,7 @@ export async function processTailoring(store: Store, cfg: Config, runId: number,
     if (!posting || !vet) return { id, needsEdit: 0, reverted: 0, dropped: 0, error: "missing posting or vet result" };
     try {
       const out = await tailorOne({ id, posting, vet, screen: store.stage<ScreenResult>(id, "screen") }, store, cfg, candidate, (r) => store.recordCall(runId, id, r));
-      store.setStatus(id, "cv_ready");
+      store.setStatus(id, "cv_ready", "apply");
       store.event(runId, "tailor", `cv ready: ${out.dir}${out.needsEdit ? ` (${out.needsEdit} claim(s) need an edit)` : ""}`, out.needsEdit ? "warn" : "info", id);
       const form = await formOne(id, store, cfg, candidate, (r) => store.recordCall(runId, id, r)).catch((e: Error) => ({ error: e.message }));
       store.event(runId, "form", formSummary(form), "error" in form ? "warn" : "info", id);

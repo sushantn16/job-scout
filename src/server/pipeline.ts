@@ -1,5 +1,6 @@
 // One run as a pipeline: per stage, what went in and out, how long it took, what it cost, and whether it is done,
 // running or still waiting. Computed from the run's stats, its event log and its LLM call log.
+import { costOf, type Price, type Usage } from "../llm/cost.ts";
 import type { DatabaseSync } from "node:sqlite";
 
 import { STAGES, type StageDef, type StageKey } from "../pipeline/stages.ts";
@@ -27,23 +28,20 @@ interface Measured extends Pick<Stage, "metrics" | "ms" | "cost" | "calls" | "er
 
 interface Run { id: number; kind: string; status: string; started_at: string; finished_at: string | null; stats: string | null }
 interface Ev { at: string; stage: string; level: string; message: string; job_id: string | null }
-interface Call { role: string; ok: number; ms: number; at: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number }
+interface Call extends Usage { role: string; ok: number; ms: number; at: string }
 
 const n = (x: unknown) => (typeof x === "number" ? x.toLocaleString("en") : "–");
 
-export function runPipeline(db: DatabaseSync, runId: number, price: (model: string) => { input: number; output: number; cacheRead: number; cacheWrite: number }): { run: Run; stages: Stage[] } | null {
+export function runPipeline(db: DatabaseSync, runId: number, price: (model: string) => Price): { run: Run; stages: Stage[] } | null {
   const run = db.prepare("SELECT id, kind, status, started_at, finished_at, stats FROM runs WHERE id = ?").get(runId) as Run | undefined;
   if (!run) return null;
   const stats = (run.stats ? JSON.parse(run.stats) : {}) as Record<string, unknown> & { vet?: Record<string, number>; fetch?: Record<string, number>; inbox?: Record<string, number> | null };
   const events = db.prepare("SELECT at, stage, level, message, job_id FROM events WHERE run_id = ? ORDER BY id").all(runId) as unknown as Ev[];
-  const calls = db.prepare("SELECT role, ok, ms, at, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens FROM llm_calls WHERE run_id = ?").all(runId) as unknown as Call[];
+  const calls = db.prepare("SELECT role, ok, ms, at, model, input_tokens AS input, output_tokens AS output, cache_read_tokens AS cacheRead, cache_write_tokens AS cacheWrite FROM llm_calls WHERE run_id = ?").all(runId) as unknown as Call[];
   const t = (iso: string) => Date.parse(iso);
 
   const byRole = (role: string) => calls.filter((c) => c.role === role);
-  const costOf = (cs: Call[]) => cs.reduce((s, c) => {
-    const p = price(c.model);
-    return s + (c.input_tokens * p.input + c.output_tokens * p.output + c.cache_read_tokens * p.cacheRead + c.cache_write_tokens * p.cacheWrite) / 1e6;
-  }, 0);
+  const cost = (cs: Call[]) => costOf(price, cs);
   // LLM stages interleave across jobs, so a stage's time is its span: first call start to last call end.
   const span = (cs: Call[]) => (cs.length ? Math.max(...cs.map((c) => t(c.at))) - Math.min(...cs.map((c) => t(c.at) - c.ms)) : null);
   const last = (stage: string) => [...events].reverse().find((e) => e.stage === stage);
@@ -67,7 +65,7 @@ export function runPipeline(db: DatabaseSync, runId: number, price: (model: stri
   outcomes.rejected ??= 0;
   const llm = { screen: byRole("screen"), research: byRole("research"), vet: byRole("vet"), tailor: byRole("tailor") };
 
-  const llmCalls = (cs: Call[]) => ({ ms: span(cs), cost: costOf(cs), calls: cs.length });
+  const llmCalls = (cs: Call[]) => ({ ms: span(cs), cost: cost(cs), calls: cs.length });
   const none = { ms: null, cost: 0, calls: 0, errors: 0 };
   const measured: Record<StageKey, Measured> = {
     fetch: {

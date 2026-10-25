@@ -47,6 +47,8 @@ test("status transitions never move a job backwards", () => {
   assert.equal(nextStatus("confirmation", "interview"), null);
   assert.equal(nextStatus("interview", "applied"), "interview");
   assert.equal(nextStatus("rejection", "interview"), "rejected");
+  // A rejection matched to a job you never applied to mustn't invent an application.
+  for (const s of ["filtered", "stale", "skip", "dismissed", "rejected"] as const) assert.equal(nextStatus("rejection", s), null, s);
   assert.equal(nextStatus("rejection", "rejected"), null);
 });
 

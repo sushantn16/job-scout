@@ -1,7 +1,8 @@
 // Set a job's status by company and title fragment, e.g. `pnpm mark langdock "product engineer" applied`.
 import { Store, type JobStatus } from "../db/store.ts";
+import { JOB_STATUSES } from "../shared/status.ts";
 
-const STATUSES: JobStatus[] = ["new", "filtered", "screened", "needs_review", "apply", "maybe", "skip", "cv_ready", "applied", "interview", "rejected", "dismissed"];
+const STATUSES: readonly JobStatus[] = JOB_STATUSES;
 const [company, title, status] = process.argv.slice(2);
 if (!company || !title || !STATUSES.includes(status as JobStatus)) {
   console.error(`usage: pnpm mark <company> <title fragment> <${STATUSES.join("|")}>`);

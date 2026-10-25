@@ -1,9 +1,9 @@
 // What you're looking for, in one place: the search filters code applies before any LLM call, what the scorer reads
 // about you, and the answers application forms get. One Save writes all three; the next run uses them.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { getJson, post } from "./api";
 import { joinTerms, lines, placePattern, terms, unlines } from "./patterns";
-import { Banner, Button, Card, cx, H3 } from "./ui";
+import { Banner, Button, Card, cx, Field, H3, input, LinesField, mono } from "./ui";
 
 interface Prefs { targetRoles: string[]; languages: string; location: string; compensation: string; culture: string[]; experience: string; knownGaps: string[]; aiFocus: string }
 interface SearchSettings {
@@ -13,6 +13,7 @@ interface SearchSettings {
   titleExclude: string;
   companyExclude: string;
   followUpDays: number;
+  maybeDays: number;
   vet: { applyAt: number; maybeAt: number };
 }
 interface Draft { search: SearchSettings; prefs: Prefs; answers: Record<string, string> }
@@ -24,28 +25,6 @@ interface Loaded extends Omit<Draft, "prefs"> {
 }
 
 const EMPTY_PREFS: Prefs = { targetRoles: [], languages: "", location: "", compensation: "", culture: [], experience: "", knownGaps: [], aiFocus: "" };
-
-const input = "w-full rounded-md border border-line bg-raised px-2 py-1.5 text-ink";
-const mono = `${input} font-mono text-[12.5px]`;
-
-function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <label className={cx("grid content-start gap-1", className)}>
-      <span className="text-[13px] font-semibold text-ink-2">{label}</span>
-      {children}
-      {hint ? <span className="text-xs text-muted">{hint}</span> : null}
-    </label>
-  );
-}
-
-/** A textarea that edits a list as one item per line, keeping blank lines while you type. */
-function LinesField({ label, hint, value, onChange, rows = 4, monospace }: { label: string; hint?: ReactNode; value: string; onChange: (v: string) => void; rows?: number; monospace?: boolean }) {
-  return (
-    <Field label={label} hint={hint}>
-      <textarea className={monospace ? mono : input} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={!monospace} />
-    </Field>
-  );
-}
 
 export function Preferences({ notify, running }: { notify: (m: string) => void; running: boolean }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -206,7 +185,7 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           <LinesField label="Role titles to skip" hint="One per line; wins over the list on the left" value={text.titleExclude ?? ""} onChange={setLines("titleExclude")} rows={8} monospace />
           <LinesField label="Companies to skip" hint="One per line, e.g. recruiting agencies" value={text.companyExclude ?? ""} onChange={setLines("companyExclude")} rows={8} monospace />
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Apply at a score of" hint="Scored jobs at or above this are tailored">
             <input className={input} type="number" min={0} max={100} value={search.vet.applyAt} onChange={(e) => setSearch({ vet: { ...search.vet, applyAt: Number(e.target.value) } })} />
           </Field>
@@ -215,6 +194,9 @@ export function Preferences({ notify, running }: { notify: (m: string) => void; 
           </Field>
           <Field label="Follow up after (days)" hint="Applications with no reply by then get a reminder">
             <input className={input} type="number" min={1} max={60} value={search.followUpDays} onChange={(e) => setSearch({ followUpDays: Number(e.target.value) })} />
+          </Field>
+          <Field label="Skip maybes after (days)" hint="Jobs left in Maybe that long move to skipped on the next run">
+            <input className={input} type="number" min={1} max={60} value={search.maybeDays} onChange={(e) => setSearch({ maybeDays: Number(e.target.value) })} />
           </Field>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">

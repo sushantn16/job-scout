@@ -52,6 +52,9 @@ const inbox = processInbox(store, cfg, runId).catch((e: Error) => (log("inbox", 
 
 try {
   log("run", `freshness window starts ${since.toISOString()}`);
+  const expired = store.expireMaybes(cfg.maybeDays);
+  for (const j of expired) store.event(runId, "vet", `no decision in ${cfg.maybeDays} days: maybe → skip`, "info", j.id);
+  if (expired.length) log("vet", `${expired.length} job(s) left in maybe for ${cfg.maybeDays}+ days moved to skip`);
   // The configured boards, plus the ones found for companies first seen on LinkedIn or HN (src/pipeline/boards.ts).
   const configured = (Object.keys(ATS) as AtsKind[]).flatMap((kind) => cfg.sources[kind].map((slug) => ({ kind, slug })));
   const found = store.boards().filter((b) => !configured.some((c) => c.kind === b.kind && c.slug === b.slug));
@@ -83,14 +86,19 @@ try {
   const linkedin = await loadLinkedIn();
   if (linkedin) {
     const errors: string[] = [];
-    const seconds = Math.ceil((started.getTime() - since.getTime()) / 1000);
-    const cards = (await linkedin.linkedinSearch({ ...cfg.linkedin, seconds }, errors)).filter((c) => isRelevant(c, cfg) && !store.seen(c.company, c.title));
-    const detailed: Posting[] = [];
-    for (const c of cards.slice(0, cfg.linkedin.maxDetails)) detailed.push(await linkedin.linkedinDetail(c, errors));
-    postings.push(...detailed);
-    fetchStats.linkedin = detailed.length;
+    // Like a board or HN, LinkedIn failing costs its postings, not the run.
+    try {
+      const seconds = Math.ceil((started.getTime() - since.getTime()) / 1000);
+      const cards = (await linkedin.linkedinSearch({ ...cfg.linkedin, seconds }, errors)).filter((c) => isRelevant(c, cfg) && !store.seen(c.company, c.title));
+      const detailed: Posting[] = [];
+      for (const c of cards.slice(0, cfg.linkedin.maxDetails)) detailed.push(await linkedin.linkedinDetail(c, errors));
+      postings.push(...detailed);
+      fetchStats.linkedin = detailed.length;
+      log("fetch", `${detailed.length} new LinkedIn postings detailed (${cards.length} new relevant cards)`);
+    } catch (e) {
+      log("fetch", `linkedin: ${(e as Error).message}`, "warn");
+    }
     for (const e of errors) log("fetch", e, "warn");
-    log("fetch", `${detailed.length} new LinkedIn postings detailed (${cards.length} new relevant cards)`);
   }
 
   const relevant = postings.filter((p) => isRelevant(p, cfg));
@@ -164,6 +172,8 @@ try {
   if (tailored.length) console.log(`\nApplications ready:\n${tailored.map((t) => `  ${t.error ? `ERROR ${t.error}` : t.dir}`).join("\n")}`);
 } catch (e) {
   log("run", (e as Error).stack ?? String(e), "error");
+  // The inbox check may still be writing; let it finish inside this run before the run is closed.
+  await inbox;
   store.finishRun(runId, "failed", {});
   notify(`Run failed: ${(e as Error).message.slice(0, 120)}`);
   process.exitCode = 1;

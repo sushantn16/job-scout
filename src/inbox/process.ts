@@ -35,15 +35,15 @@ export async function processInbox(store: Store, cfg: Config, runId: number): Pr
     stats.new++;
     const { kind, rule } = classify(e.subject, e.text);
     const match = matchJob(e, jobs);
-    let fromStatus: string | null = null;
-    let toStatus: string | null = null;
+    let fromStatus: JobStatus | null = null;
+    let toStatus: JobStatus | null = null;
     if (match) {
       stats.matched++;
       const next = kind === "unclear" ? null : nextStatus(kind, match.job.status);
       if (next) {
         fromStatus = match.job.status;
         toStatus = next;
-        store.setStatus(match.job.id, next as JobStatus);
+        store.setStatus(match.job.id, next);
         match.job.status = next;
         stats.changed++;
         if (next === "interview") stats.interviews++;

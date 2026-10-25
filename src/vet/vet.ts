@@ -8,7 +8,7 @@ import type { CompanyProfile } from "../research/profile.ts";
 import type { Signals } from "../filter/rules.ts";
 import type { Posting } from "../sources/types.ts";
 import type { Candidate } from "./candidate.ts";
-import { fitScore, type Factor, type Ratings } from "./score.ts";
+import { combineReviews, fitScore, type Factor, type Ratings } from "./score.ts";
 
 // Limits live in descriptions; clamp() enforces them after parsing (the API does not enforce lengths or ranges).
 const Short = (n: number) => z.string().describe(`under ${n} characters`);
@@ -85,7 +85,8 @@ factor on its own merits.
 - AI relevance is a plus, not a requirement: a role without AI work is not a gap for that reason alone.
 - Workplace: on-site, hybrid and remote are equally acceptable. Never count office presence, in-person collaboration
   or travel as a gap.
-- Culture, from the company profile: English-first team, engineering culture, stage and funding, red flags.
+- Culture, from the company profile: English-first team, engineering culture, stage and funding, red flags. Employee
+  ratings are applied separately; don't count them again in engineering culture.
 - Gaps: "blocker" only for something that makes applying pointless (for example a required clearance or citizenship,
   a required language, or years of a stack the candidate lacks entirely). "major" for a significant shortfall,
   "minor" for a nice-to-have.
@@ -133,7 +134,7 @@ export async function vetJob(
     engineeringCulture: out.culture.engineeringCulture,
     englishFirst: out.culture.englishFirst,
   };
-  const { score, factors } = fitScore(ratings, s, args.cfg.vet.weights);
+  const { score, factors } = fitScore(ratings, s, args.cfg.vet.weights, combineReviews(args.company?.employeeReviews ?? []));
 
   const droppedBulletIds: string[] = [];
   const strengths = out.strengths.map((st) => ({

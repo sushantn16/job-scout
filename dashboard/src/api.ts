@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type Status =
-  | "new" | "filtered" | "stale" | "screened" | "needs_review" | "apply" | "maybe" | "skip"
-  | "cv_ready" | "applied" | "interview" | "rejected" | "dismissed";
+import type { JobStatus } from "../../src/shared/status";
+
+export type Status = JobStatus;
 
 export interface Run {
   id: number;
-  kind: "scan" | "vet";
+  kind: "scan" | "vet" | "inbox";
   started_at: string;
   finished_at: string | null;
   status: "running" | "done" | "failed";
@@ -104,6 +104,8 @@ export interface JobDetail extends Omit<JobRow, "score" | "decision" | "summary"
     name: string; website: string | null; oneLiner: string; stage: string; size: string | null; outlook: string; workingLanguage: string;
     funding: Cited[]; engineeringCulture: Cited[]; redFlags: Cited[]; whyUsMaterial: Cited[];
     reviewLinks: { glassdoor: string; kununu: string }; researchedAt: string;
+    /** Missing on profiles researched before ratings were looked up. */
+    employeeReviews?: { site: "kununu" | "glassdoor"; rating: number; reviewCount: number | null; sourceUrl: string }[];
   } | null;
   cost: number;
   form: FormState | null;
