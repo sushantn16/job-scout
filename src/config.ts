@@ -14,6 +14,11 @@ export const Config = z.object({
     recruiters: z.enum(["flag", "skip"]).default("flag"),
   }),
   caps: z.object({ vetPerRun: z.number().int(), tailorPerRun: z.number().int() }),
+  /**
+   * Jobs worked on at once. Each job's screen, research and score run in order (research reads the screened text), but
+   * jobs run side by side, and a job moves on to tailoring as soon as it's scored "apply".
+   */
+  concurrency: z.object({ score: z.number().int().positive(), tailor: z.number().int().positive() }).default({ score: 4, tailor: 3 }),
   /** Days without a reply before an application is due a follow-up. */
   followUpDays: z.number().int().positive().default(10),
   /** Days a job can stay in maybe without a decision before a scan moves it to skip. */

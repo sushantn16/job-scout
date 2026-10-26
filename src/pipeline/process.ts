@@ -1,4 +1,5 @@
-// LLM stages over the queue: screen → redact → research (cached per company) → vet. Up to 4 jobs in flight.
+// LLM stages over the queue: screen → redact → research (cached per company) → vet. `concurrency.score` jobs in flight,
+// each reported through `onScored` as soon as it's done, so tailoring can start before the rest are scored.
 import type { Config } from "../config.ts";
 import { companyKey, type JobStatus, type Store } from "../db/store.ts";
 import { screen } from "../filter/rules.ts";
@@ -31,7 +32,9 @@ export interface Processed {
 }
 
 /** `ids` limits the run to those queued jobs (a job you just added), instead of the best of the whole queue. */
-export async function processQueue(store: Store, cfg: Config, runId: number, candidate: Candidate, ids?: string[]): Promise<{ stats: ProcessStats; jobs: Processed[] }> {
+export async function processQueue(
+  store: Store, cfg: Config, runId: number, candidate: Candidate, ids?: string[], onScored?: (job: Processed) => void,
+): Promise<{ stats: ProcessStats; jobs: Processed[] }> {
   const queue = store.queue(cfg.caps.vetPerRun, ids);
   store.event(runId, "vet", `${queue.length} job(s) queued for screening and vetting`);
   // One research call per company per run, even when several of its jobs are in flight at once.
@@ -50,7 +53,7 @@ export async function processQueue(store: Store, cfg: Config, runId: number, can
     return inflight.get(key)!;
   };
 
-  const jobs = await mapLimit(queue, 4, async ({ id, posting }): Promise<Processed> => {
+  const scoreOne = async (id: string, posting: Posting): Promise<Processed> => {
     const record = (r: CallRecord) => store.recordCall(runId, id, r);
     try {
       const screened = await screenPosting(posting, record);
@@ -70,6 +73,12 @@ export async function processQueue(store: Store, cfg: Config, runId: number, can
       store.event(runId, "vet", `failed: ${(e as Error).message}`, "error", id);
       return { id, posting, status: "new", findings: 0, error: (e as Error).message };
     }
+  };
+
+  const jobs = await mapLimit(queue, cfg.concurrency.score, async ({ id, posting }) => {
+    const job = await scoreOne(id, posting);
+    onScored?.(job);
+    return job;
   });
 
   const count = (s: JobStatus) => jobs.filter((j) => j.status === s).length;

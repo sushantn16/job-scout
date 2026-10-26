@@ -1,12 +1,13 @@
 // Tailoring stage: for each "apply" job, write a tailored one-page CV and application text, mark it cv_ready, then
-// read its application form and prepare answers (./form.ts). A form that can't be read never fails the job.
+// read its application form and prepare answers (./form.ts). A form that can't be read never fails the job. In a scan,
+// jobs join as they're scored (tailoringQueue), so the first "apply" doesn't wait for the rest of the run.
 import { mkdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Config } from "../config.ts";
 import { companyKey, type Store } from "../db/store.ts";
 import type { ScreenResult } from "../injection/screen.ts";
 import type { CallRecord } from "../llm/client.ts";
-import { mapLimit } from "../http.ts";
+import { workQueue } from "../http.ts";
 import { formOne, formSummary } from "./form.ts";
 import type { CompanyProfile } from "../research/profile.ts";
 import type { Posting } from "../sources/types.ts";
@@ -48,23 +49,44 @@ export async function tailorOne(job: TailorJob, store: Store, cfg: Config, candi
   return { id: job.id, dir: toStored(dir), needsEdit: tailored.needsEdit.length, reverted: tailored.reverted.length, dropped: fitted.dropped.length };
 }
 
-export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate, only?: string[]): Promise<TailorOutcome[]> {
-  const ids = store.tailorQueue(cfg.caps.tailorPerRun, only);
-  store.event(runId, "tailor", `${ids.length} job(s) to tailor`);
-  return mapLimit(ids, 2, async (id) => {
+/** Jobs whose form may be on their company's own board, which board discovery is still looking for. */
+const NEEDS_BOARD = new Set(["linkedin", "hn", "manual"]);
+
+/**
+ * Tailoring as a queue: a job starts the moment it's added (an "apply" verdict mid-run), up to `concurrency.tailor` at
+ * a time and `caps.tailorPerRun` in the run. A job first seen on LinkedIn, HN or a pasted link reads its form only once
+ * `boardsReady` settles: board discovery may find its own posting, whose form can be read.
+ */
+export function tailoringQueue(store: Store, cfg: Config, runId: number, candidate: Candidate, boardsReady: Promise<unknown> = Promise.resolve()) {
+  const queue = workQueue(cfg.concurrency.tailor, async (id: string): Promise<TailorOutcome> => {
     const posting = store.posting(id);
     const vet = store.stage<VetResult>(id, "vet");
     if (!posting || !vet) return { id, needsEdit: 0, reverted: 0, dropped: 0, error: "missing posting or vet result" };
+    const record = (r: CallRecord) => store.recordCall(runId, id, r);
     try {
-      const out = await tailorOne({ id, posting, vet, screen: store.stage<ScreenResult>(id, "screen") }, store, cfg, candidate, (r) => store.recordCall(runId, id, r));
+      const out = await tailorOne({ id, posting, vet, screen: store.stage<ScreenResult>(id, "screen") }, store, cfg, candidate, record);
       store.setStatus(id, "cv_ready", "apply");
       store.event(runId, "tailor", `cv ready: ${out.dir}${out.needsEdit ? ` (${out.needsEdit} claim(s) need an edit)` : ""}`, out.needsEdit ? "warn" : "info", id);
-      const form = await formOne(id, store, cfg, candidate, (r) => store.recordCall(runId, id, r)).catch((e: Error) => ({ error: e.message }));
+      if (NEEDS_BOARD.has(posting.source)) await boardsReady.catch(() => undefined);
+      const form = await formOne(id, store, cfg, candidate, record).catch((e: Error) => ({ error: e.message }));
       store.event(runId, "form", formSummary(form), "error" in form ? "warn" : "info", id);
       return out;
     } catch (e) {
       store.event(runId, "tailor", `failed: ${(e as Error).message}`, "error", id);
       return { id, needsEdit: 0, reverted: 0, dropped: 0, error: (e as Error).message };
     }
-  });
+  }, cfg.caps.tailorPerRun);
+  return {
+    add: (id: string) => queue.add(id) && (store.event(runId, "tailor", "queued for tailoring", "info", id), true),
+    done: queue.done,
+  };
+}
+
+/** Tailor the "apply" jobs waiting, best score first (`only`: just those), without scoring anything first. */
+export async function processTailoring(store: Store, cfg: Config, runId: number, candidate: Candidate, only?: string[]): Promise<TailorOutcome[]> {
+  const queue = tailoringQueue(store, cfg, runId, candidate);
+  const ids = store.tailorQueue(cfg.caps.tailorPerRun, only);
+  store.event(runId, "tailor", `${ids.length} job(s) to tailor`);
+  for (const id of ids) queue.add(id);
+  return queue.done();
 }

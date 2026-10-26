@@ -272,3 +272,31 @@ test("a city added on Preferences: Re-check stored jobs scores the jobs the next
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a live run's pipeline shows scoring and tailoring running at the same time", async () => {
+  const { runPipeline } = await import("../src/server/pipeline.ts");
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    const store = new Store(join(dir, "test.db"));
+    const runId = store.startRun(new Date(), "scan");
+    const price = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    const status = () => Object.fromEntries(runPipeline(store.db, runId, price)!.stages.map((s) => [s.key, s.status]));
+    store.event(runId, "fetch", "123 postings from 10 boards");
+    store.event(runId, "filter", "12 relevant, 4 new");
+    store.event(runId, "screen", "1 finding(s)");
+    store.event(runId, "vet", "apply (91): strong fit");
+    assert.deepEqual([status().screen, status().research, status().vet, status().tailor], ["running", "running", "running", "waiting"]);
+
+    // The first "apply" is being tailored while the rest are still scored.
+    store.event(runId, "tailor", "queued for tailoring");
+    let s = status();
+    assert.deepEqual([s.fetch, s.filter, s.screen, s.vet, s.tailor], ["done", "done", "running", "running", "running"]);
+
+    store.event(runId, "vet", 'done: {"processed":4}');
+    s = status();
+    assert.deepEqual([s.screen, s.research, s.vet, s.tailor], ["done", "done", "done", "running"]);
+    store.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

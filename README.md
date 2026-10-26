@@ -170,7 +170,8 @@ JOB_SCOUT_MODEL_TAILOR=anthropic/claude-sonnet-4.5
   After the first start, edit it on the dashboard's **CV** page.
 - **`data/private/preferences.json`** tells the scorer what you want. Edit it on the **Preferences** page.
 - **`config/job-scout.local.json`** lists the job boards to scan (`sources`) and the rules. Title, location and pay
-  filters can also be changed on **Preferences**.
+  filters can also be changed on **Preferences**. `concurrency` sets how many jobs are scored (4) and tailored (3) at
+  once; a job is tailored as soon as it scores "apply", without waiting for the rest.
 
 ### 4. Start
 

@@ -102,13 +102,23 @@ export function runPipeline(db: DatabaseSync, runId: number, price: (model: stri
   const activity = events.map((e) => (e.stage === "inbox" ? -1 : order.indexOf(e.stage))).filter((i) => i >= 0);
   const lastCall = calls.length ? order.indexOf([...calls].sort((a, b) => t(a.at) - t(b.at)).at(-1)!.role) : -1;
   const current = Math.max(run.kind === "vet" ? STAGES.findIndex((s) => !s.scanOnly) : 0, ...activity, lastCall);
+  // Stages overlap in a live run: jobs are screened, researched and scored side by side until scoring is done, and
+  // tailoring starts with the first "apply". These stages run together rather than one after another.
+  const scoring = new Set(["screen", "research", "vet"]);
+  const scored = events.some((e) => e.stage === "vet" && e.message.startsWith("done:"));
+  const started = (key: string) => events.some((e) => e.stage === key) || calls.some((c) => c.role === key);
+  const live = (key: string): StageStatus | null => {
+    if (scoring.has(key)) return scored ? "done" : current >= order.indexOf("screen") ? "running" : null;
+    if (key === "tailor") return started("tailor") ? "running" : null;
+    return null;
+  };
   const stages = STAGES.map((s, i): Stage => {
     const { headline, ...m } = measured[s.key];
     let status: StageStatus;
     if (s.key === "inbox") status = inboxSkipped ? "skipped" : inboxFailed ? "failed" : inboxDone ? (stats.inbox?.new ? "done" : "idle") : run.status === "running" ? "running" : "skipped";
     else if (s.key === "outcomes") status = outcomes.applied ? "done" : "idle";
     else if ((run.kind === "vet" && s.scanOnly) || (llmSkipped && s.kind === "LLM")) status = "skipped";
-    else if (run.status === "running") status = i < current ? "done" : i === current ? "running" : "waiting";
+    else if (run.status === "running") status = live(s.key) ?? (i < current ? "done" : i === current ? "running" : "waiting");
     else if (run.status === "failed") status = i < current ? "done" : i === current ? "failed" : "waiting";
     // A finished stage that had nothing to process (no new jobs reached it) is idle, not "done". Ready follows Tailor.
     else status = !s.scanOnly && (s.key === "ready" ? measured.tailor.calls : m.calls) === 0 ? "idle" : "done";

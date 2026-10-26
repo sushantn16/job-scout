@@ -12,6 +12,10 @@
     "vetPerRun": 15,
     "tailorPerRun": 5
   },
+  "concurrency": {
+    "score": 4,
+    "tailor": 3
+  },
   "freshness": {
     "minHours": 24,
     "maxHours": 336
