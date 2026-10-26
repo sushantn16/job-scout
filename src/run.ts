@@ -12,7 +12,7 @@ import { notify } from "./notify.ts";
 import { ensureAwsSession } from "./aws/session.ts";
 import { processInbox } from "./inbox/process.ts";
 import { printVetDigest, processQueue } from "./pipeline/process.ts";
-import { processTailoring, type TailorOutcome } from "./pipeline/tailoring.ts";
+import { tailoringQueue, type TailorOutcome } from "./pipeline/tailoring.ts";
 import { discoverBoards } from "./pipeline/boards.ts";
 import { loadCandidate } from "./vet/candidate.ts";
 import type { EventStage } from "./pipeline/stages.ts";
@@ -64,47 +64,48 @@ try {
   const configured = (Object.keys(ATS) as AtsKind[]).flatMap((kind) => cfg.sources[kind].map((slug) => ({ kind, slug })));
   const found = store.boards().filter((b) => !configured.some((c) => c.kind === b.kind && c.slug === b.slug));
   const boards = [...configured, ...found];
-  const fetched = await mapLimit(boards, 16, async ({ kind, slug }) => {
+  const fetchStats = { boards: boards.length, foundBoards: found.length, boardPostings: 0, hn: 0, linkedin: 0 };
+  // Boards, HN and LinkedIn are fetched side by side. Their postings are kept in that order, so a job seen in more than
+  // one place is stored from its board, as before.
+  const fromBoards = mapLimit(boards, 16, async ({ kind, slug }) => {
     try {
       return await ATS[kind](slug);
     } catch (e) {
       log("fetch", `${kind}/${slug}: ${(e as Error).message}`, "warn");
       return [];
     }
+  }).then((fetched) => {
+    fetchStats.boardPostings = fetched.flat().length;
+    log("fetch", `${fetchStats.boardPostings} postings from ${boards.length} boards${found.length ? ` (${found.length} found from LinkedIn and HN jobs)` : ""}`);
+    return fetched;
   });
-  const byBoard = new Map(boards.map((b, i) => [`${b.kind}/${b.slug}`, fetched[i]!]));
-  const postings = fetched.flat();
-  const fetchStats = { boards: boards.length, foundBoards: found.length, boardPostings: postings.length, hn: 0, linkedin: 0 };
-  log("fetch", `${postings.length} postings from ${boards.length} boards${found.length ? ` (${found.length} found from LinkedIn and HN jobs)` : ""}`);
-
-  if (cfg.sources.hn) {
-    try {
-      const hn = await hnWhosHiring();
-      postings.push(...hn);
-      fetchStats.hn = hn.length;
-      log("fetch", `${hn.length} HN "Who is hiring" posts`);
-    } catch (e) {
-      log("fetch", `hn: ${(e as Error).message}`, "warn");
-    }
-  }
-
-  const linkedin = await loadLinkedIn();
-  if (linkedin) {
+  const fromHn = !cfg.sources.hn ? Promise.resolve([]) : hnWhosHiring().then(
+    (hn) => (fetchStats.hn = hn.length, log("fetch", `${hn.length} HN "Who is hiring" posts`), hn),
+    (e: Error) => (log("fetch", `hn: ${e.message}`, "warn"), [] as Posting[]),
+  );
+  const fromLinkedIn = loadLinkedIn().then(async (linkedin): Promise<Posting[]> => {
+    if (!linkedin) return [];
     const errors: string[] = [];
     // Like a board or HN, LinkedIn failing costs its postings, not the run.
     try {
       const seconds = Math.ceil((started.getTime() - since.getTime()) / 1000);
       const cards = (await linkedin.linkedinSearch({ ...cfg.linkedin, seconds }, errors)).filter((c) => isRelevant(c, cfg) && !store.seen(c.company, c.title));
+      // One detail page at a time: LinkedIn throttles bursts.
       const detailed: Posting[] = [];
       for (const c of cards.slice(0, cfg.linkedin.maxDetails)) detailed.push(await linkedin.linkedinDetail(c, errors));
-      postings.push(...detailed);
       fetchStats.linkedin = detailed.length;
       log("fetch", `${detailed.length} new LinkedIn postings detailed (${cards.length} new relevant cards)`);
+      return detailed;
     } catch (e) {
       log("fetch", `linkedin: ${(e as Error).message}`, "warn");
+      return [];
+    } finally {
+      for (const e of errors) log("fetch", e, "warn");
     }
-    for (const e of errors) log("fetch", e, "warn");
-  }
+  });
+  const [fetched, hn, linkedinPostings] = await Promise.all([fromBoards, fromHn, fromLinkedIn]);
+  const byBoard = new Map(boards.map((b, i) => [`${b.kind}/${b.slug}`, fetched[i]!]));
+  const postings = [...fetched.flat(), ...hn, ...linkedinPostings];
 
   const relevant = postings.filter((p) => isRelevant(p, cfg));
   const fresh: Screened[] = [];
@@ -141,10 +142,21 @@ try {
   else if (aws) log("aws", `session ${aws.detail}`);
   if (llmConfigured && aws?.ok) {
     const candidate = loadCandidate();
-    vetted = await processQueue(store, cfg, runId, candidate);
-    // Before tailoring, so a LinkedIn job found on its company's board gets its form read in this run.
-    await discoverBoards(store, runId, byBoard).catch((e: Error) => log("boards", `failed: ${e.message}`, "warn"));
-    tailored = await processTailoring(store, cfg, runId, candidate);
+    // Scoring and tailoring overlap: a job is tailored as soon as it's scored "apply", while others are still being
+    // scored. "apply" jobs left from earlier runs start at once. Board discovery runs once scoring is done; only the
+    // forms of jobs first seen on LinkedIn, HN or a pasted link wait for it.
+    let boardsDone = () => {};
+    const boardsReady = new Promise<void>((resolve) => (boardsDone = resolve));
+    const tailoring = tailoringQueue(store, cfg, runId, candidate, boardsReady);
+    for (const id of store.tailorQueue(cfg.caps.tailorPerRun)) tailoring.add(id);
+    try {
+      vetted = await processQueue(store, cfg, runId, candidate, undefined, (job) => void (job.status === "apply" && tailoring.add(job.id)));
+      await discoverBoards(store, runId, byBoard).catch((e: Error) => log("boards", `failed: ${e.message}`, "warn"));
+    } finally {
+      // Also when scoring fails: tailoring already under way finishes inside this run.
+      boardsDone();
+      tailored = await tailoring.done();
+    }
   }
   else if (!llmConfigured) log("vet", "skipped: JOB_SCOUT_MODEL or data/private/preferences.json missing", "warn");
   const replies = await inbox;

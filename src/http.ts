@@ -47,3 +47,31 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
+
+/**
+ * A queue that starts work on each item the moment it's added: at most `limit` at a time, at most `cap` items in all,
+ * duplicates ignored. Unlike mapLimit, items can arrive while earlier ones run. `done()` waits for everything added.
+ */
+export function workQueue<T, R>(limit: number, work: (item: T) => Promise<R>, cap = Infinity) {
+  const added = new Set<T>();
+  const results: Promise<R>[] = [];
+  const waiting: (() => void)[] = [];
+  let running = 0;
+  // A finished item hands its slot straight to the next waiting one, so `running` never exceeds `limit`.
+  const acquire = () => (running < limit ? (running++, Promise.resolve()) : new Promise<void>((r) => waiting.push(r)));
+  const release = () => {
+    const next = waiting.shift();
+    if (next) next();
+    else running--;
+  };
+  return {
+    /** False if the item was already added or the cap is reached. */
+    add(item: T): boolean {
+      if (added.has(item) || added.size >= cap) return false;
+      added.add(item);
+      results.push(acquire().then(() => work(item)).finally(release));
+      return true;
+    },
+    done: () => Promise.all(results),
+  };
+}
