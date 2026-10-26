@@ -74,6 +74,10 @@ export const Search = z.object({
 }).partial();
 export type Search = z.infer<typeof Search>;
 
+/** What decides which jobs are kept, as one comparable string: a change to it widens the next scan (newJobWindow). */
+export const keptBy = (s: Pick<Config, "locations" | "titleInclude" | "titleExclude" | "companyExclude" | "profile">) =>
+  JSON.stringify([s.locations, s.titleInclude, s.titleExclude, s.companyExclude, s.profile]);
+
 /** `searchPath` null ignores saved search filters (tests use the example config as it is). */
 export function loadConfig(path = defaultPath(), searchPath: string | null = SEARCH_PATH): Config {
   const base = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown> & { vet?: object };

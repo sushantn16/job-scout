@@ -225,3 +225,50 @@ test("a run left running after a crash is closed as failed, a live one isn't", (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a city added on Preferences: Re-check stored jobs scores the jobs the next scan had to call older", async () => {
+  const { cpSync, mkdirSync, utimesSync, writeFileSync } = await import("node:fs");
+  const { execFileSync } = await import("node:child_process");
+  const dir = mkdtempSync(join(tmpdir(), "job-scout-"));
+  try {
+    // A repo-shaped folder: the example config, and a database where it happened as on 2026-10-24.
+    cpSync("config", join(dir, "config"), { recursive: true });
+    mkdirSync(join(dir, "data", "private"), { recursive: true });
+    const cfg = loadConfig("config/job-scout.json", null);
+    writeFileSync(join(dir, "data", "private", "search.json"), JSON.stringify({ locations: { ...cfg.locations, munich: "\\bmunich\\b" } }));
+    const saved = new Date("2026-10-24T18:53:51Z");
+    utimesSync(join(dir, "data", "private", "search.json"), saved, saved);
+    const store = new Store(join(dir, "data", "job-scout.db"));
+    assert.equal(store.filtersChangedAt()?.toISOString(), saved.toISOString(), "older databases take it from the last save");
+
+    const scan = (startedAt: string, since: string) => {
+      const id = store.startRun(new Date(since), "scan");
+      store.db.prepare("UPDATE runs SET started_at = ?, status = 'done' WHERE id = ?").run(startedAt, id);
+      return id;
+    };
+    const before = scan("2026-10-24T18:00:00Z", "2026-10-23T18:00:00Z");
+    const after = scan("2026-10-24T18:54:49Z", "2026-10-23T18:54:49Z");
+    const later = scan("2026-10-25T12:00:00Z", "2026-10-24T18:54:49Z");
+    assert.equal(store.firstScanAfter(saved), after);
+
+    const text = "You will own product features end to end in TypeScript and React, with a small team. ".repeat(2);
+    const add = (runId: number, company: string, posted: string) => {
+      const p = { ...pasted({ url: `https://careers.${company}.com/1`, company, title: "Product Engineer", location: "Munich", description: text }), posted };
+      return store.upsert(runId, screen(p, loadConfig(join(dir, "config", "job-scout.json"), join(dir, "data", "private", "search.json"))), false).id;
+    };
+    const tacto = add(after, "tacto", "2026-10-16");       // 8 days before that scan: within 14 days
+    const tanso = add(after, "tanso", "2026-08-24");       // two months old: stays older
+    const elsewhere = add(later, "laterco", "2026-10-16"); // found by a normal scan: its window applies
+    add(before, "beforeco", "2026-10-16");
+    store.db.close();
+
+    execFileSync(process.execPath, ["--disable-warning=ExperimentalWarning", join(process.cwd(), "src/cli/rescreen.ts")], { cwd: dir, stdio: "pipe" });
+    const after2 = new Store(join(dir, "data", "job-scout.db"));
+    assert.equal(after2.status(tacto), "new", "queued for scoring");
+    assert.equal(after2.status(tanso), "stale");
+    assert.equal(after2.status(elsewhere), "stale");
+    after2.db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

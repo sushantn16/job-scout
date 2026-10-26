@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Screened } from "../filter/rules.ts";
 import type { EventStage } from "../pipeline/stages.ts";
 import type { AtsKind } from "../sources/ats.ts";
@@ -47,6 +47,23 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     migrate(this.db);
+    // Databases from before filtersChangedAt was kept: the search filters last changed when they were last saved.
+    const search = join(dirname(path), "private", "search.json");
+    if (!this.meta("filtersChangedAt") && existsSync(search)) this.setMeta("filtersChangedAt", statSync(search).mtime.toISOString());
+  }
+
+  meta(key: string): string | null {
+    return (this.db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+  }
+
+  /** When the filters that decide which jobs are kept last changed; jobs they newly let in may be older than one run. */
+  filtersChangedAt(): Date | null {
+    const v = this.meta("filtersChangedAt");
+    return v ? new Date(v) : null;
   }
 
   /** Most recent run of any kind, for attaching dashboard events; 0 if none. */
@@ -60,6 +77,16 @@ export class Store {
   }
 
   /** Freshness window start recorded for a run; older runs fall back to 24 hours before their start. */
+  /** The first scan that started at or after `t`, or null. */
+  firstScanAfter(t: Date): number | null {
+    return (this.db.prepare("SELECT min(id) AS id FROM runs WHERE kind = 'scan' AND started_at >= ?").get(t.toISOString()) as { id: number | null }).id;
+  }
+
+  /** When a run started. */
+  runStarted(id: number): Date {
+    return new Date((this.db.prepare("SELECT started_at FROM runs WHERE id = ?").get(id) as { started_at: string }).started_at);
+  }
+
   runSince(id: number): Date {
     const row = this.db.prepare("SELECT started_at, since FROM runs WHERE id = ?").get(id) as { started_at: string; since: string | null };
     return new Date(row.since ?? new Date(Date.parse(row.started_at) - 24 * 3_600_000).toISOString());

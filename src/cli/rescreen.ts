@@ -10,6 +10,17 @@ import { JOB_STATUSES } from "../shared/status.ts";
 const cfg = loadConfig();
 const store = new Store();
 const UNSCORED: JobStatus[] = ["new", "filtered", "stale"];
+const changedAt = store.filtersChangedAt();
+const widenedScan = changedAt ? store.firstScanAfter(changedAt) : null;
+/**
+ * Freshness is judged against the window of the run that first saw the job, not against today. The first scan after the
+ * filters changed reaches back maxHours, as newJobWindow() gives such a scan; scans from before that rule recorded only
+ * their normal window, so it's applied here too.
+ */
+const windowOf = (run: number) => {
+  const since = store.runSince(run);
+  return run === widenedScan ? new Date(Math.min(since.getTime(), store.runStarted(run).getTime() - cfg.freshness.maxHours * 3_600_000)) : since;
+};
 let changed = 0;
 let refreshed = 0;
 for (const { id, status: before, firstRun, manual, posting } of store.postings([...JOB_STATUSES])) {
@@ -21,8 +32,7 @@ for (const { id, status: before, firstRun, manual, posting } of store.postings([
     refreshed++;
     continue;
   }
-  // Freshness is judged against the window of the run that first saw the job, not against today.
-  const fresh = isFresh(posting.posted, store.runSince(firstRun));
+  const fresh = isFresh(posting.posted, windowOf(firstRun));
   store.updateScreen(id, s, fresh);
   const after = statusFor(s, fresh);
   if (before !== after) {
